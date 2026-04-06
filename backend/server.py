@@ -1,20 +1,25 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Request, Response, Depends
 from dotenv import load_dotenv
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import base64
 import asyncio
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+import bcrypt
+import jwt
+import secrets
+from bson import ObjectId
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -23,15 +28,77 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+JWT_ALGORITHM = "HS256"
+
+# Auth helpers
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+
+def get_jwt_secret() -> str:
+    return os.environ.get("JWT_SECRET", "dev-secret-key-change-in-production")
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(minutes=15), "type": "access"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+async def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user["_id"] = str(user["_id"])
+        user.pop("password_hash", None)
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
 # Models
 class StyleOption(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    category: str  # 'hair' or 'beard'
+    category: str
     description: str
     image_url: Optional[str] = None
     prompt_template: str
+    favorites_count: int = 0
+
+class UserRegister(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str = "user"
+    favorites: List[str] = []
 
 class UploadPhotoResponse(BaseModel):
     photo_id: str
@@ -44,11 +111,14 @@ class GenerateRequest(BaseModel):
 class GeneratedResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: Optional[str] = None
     photo_id: str
     style_id: str
     style_name: str
-    original_image: str  # base64
-    generated_image: str  # base64
+    original_image: str
+    generated_image: str
+    is_public: bool = False
+    likes: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class HistoryItem(BaseModel):
@@ -56,7 +126,77 @@ class HistoryItem(BaseModel):
     id: str
     style_name: str
     generated_image: str
+    is_public: bool
+    likes: int
     created_at: datetime
+
+# Auth endpoints
+@api_router.post("/auth/register", response_model=UserResponse)
+async def register(user_data: UserRegister, response: Response):
+    email = user_data.email.lower()
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(ObjectId())
+    user_doc = {
+        "_id": ObjectId(user_id),
+        "name": user_data.name,
+        "email": email,
+        "password_hash": hash_password(user_data.password),
+        "role": "user",
+        "favorites": [],
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(user_doc)
+    
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    
+    return UserResponse(id=user_id, name=user_data.name, email=email, role="user", favorites=[])
+
+@api_router.post("/auth/login", response_model=UserResponse)
+async def login(credentials: UserLogin, response: Response, request: Request):
+    email = credentials.email.lower()
+    user = await db.users.find_one({"email": email})
+    
+    if not user or not verify_password(credentials.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    user_id = str(user["_id"])
+    access_token = create_access_token(user_id, email)
+    refresh_token = create_refresh_token(user_id)
+    
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    
+    return UserResponse(
+        id=user_id,
+        name=user["name"],
+        email=user["email"],
+        role=user.get("role", "user"),
+        favorites=user.get("favorites", [])
+    )
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_me(request: Request):
+    user = await get_current_user(request)
+    return UserResponse(
+        id=user["_id"],
+        name=user["name"],
+        email=user["email"],
+        role=user.get("role", "user"),
+        favorites=user.get("favorites", [])
+    )
+
+@api_router.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    return {"message": "Logged out successfully"}
 
 # Initialize style catalog
 async def init_styles():
@@ -65,180 +205,107 @@ async def init_styles():
         return
     
     styles = [
-        # Haircuts
-        StyleOption(
-            name="Modern Fade",
-            category="hair",
-            description="Clean modern fade with tapered sides",
+        StyleOption(name="Modern Fade", category="hair", description="Clean modern fade with tapered sides",
             image_url="https://images.unsplash.com/photo-1769071167442-3b67ea1eb769?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person's hairstyle into a modern fade haircut with clean tapered sides and short top, professional barbershop quality"
-        ),
-        StyleOption(
-            name="Textured Crop",
-            category="hair",
-            description="Textured short crop with movement",
+            prompt_template="Transform this person's hairstyle into a modern fade haircut with clean tapered sides and short top, professional barbershop quality"),
+        StyleOption(name="Textured Crop", category="hair", description="Textured short crop with movement",
             image_url="https://images.unsplash.com/photo-1772798921699-69445b09c598?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwxfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person's hairstyle into a textured crop haircut with natural movement and layered texture on top"
-        ),
-        StyleOption(
-            name="Slick Back",
-            category="hair",
-            description="Classic slicked back style",
+            prompt_template="Transform this person's hairstyle into a textured crop haircut with natural movement and layered texture on top"),
+        StyleOption(name="Slick Back", category="hair", description="Classic slicked back style",
             image_url="https://images.unsplash.com/photo-1769072058450-ac7cc0d0a541?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwyfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person's hairstyle into a classic slicked back hairstyle, smooth and polished with hair combed backwards"
-        ),
-        StyleOption(
-            name="Buzz Cut",
-            category="hair",
-            description="Ultra short military style",
-            prompt_template="Transform this person's hairstyle into a buzz cut, ultra short military style haircut with uniform length all around"
-        ),
-        StyleOption(
-            name="Pompadour",
-            category="hair",
-            description="High volume classic pompadour",
-            prompt_template="Transform this person's hairstyle into a high volume pompadour with swept up front and volumized top"
-        ),
-        StyleOption(
-            name="Quiff",
-            category="hair",
-            description="Modern quiff with volume",
-            prompt_template="Transform this person's hairstyle into a modern quiff with textured volume on top and styled upwards"
-        ),
-        StyleOption(
-            name="Undercut",
-            category="hair",
-            description="Disconnected undercut style",
-            prompt_template="Transform this person's hairstyle into an undercut with long hair on top and shaved/very short sides"
-        ),
-        StyleOption(
-            name="Man Bun",
-            category="hair",
-            description="Long hair tied in bun",
-            prompt_template="Transform this person's hairstyle into long hair styled in a man bun on top of the head"
-        ),
-        StyleOption(
-            name="French Crop",
-            category="hair",
-            description="Short fringe crop",
-            prompt_template="Transform this person's hairstyle into a French crop with short textured fringe and faded sides"
-        ),
-        StyleOption(
-            name="Side Part",
-            category="hair",
-            description="Classic side parted style",
-            prompt_template="Transform this person's hairstyle into a classic side part with clean defined part line and combed sides"
-        ),
-        StyleOption(
-            name="Caesar Cut",
-            category="hair",
-            description="Short horizontal fringe",
-            prompt_template="Transform this person's hairstyle into a Caesar cut with short horizontal fringe and uniform length"
-        ),
-        StyleOption(
-            name="Curly Top",
-            category="hair",
-            description="Natural curly texture on top",
-            prompt_template="Transform this person's hairstyle into curly hair on top with natural texture and faded sides"
-        ),
-        # Beards
-        StyleOption(
-            name="Full Beard",
-            category="beard",
-            description="Full natural beard",
+            prompt_template="Transform this person's hairstyle into a classic slicked back hairstyle, smooth and polished with hair combed backwards"),
+        StyleOption(name="Buzz Cut", category="hair", description="Ultra short military style",
+            prompt_template="Transform this person's hairstyle into a buzz cut, ultra short military style haircut with uniform length all around"),
+        StyleOption(name="Pompadour", category="hair", description="High volume classic pompadour",
+            prompt_template="Transform this person's hairstyle into a high volume pompadour with swept up front and volumized top"),
+        StyleOption(name="Quiff", category="hair", description="Modern quiff with volume",
+            prompt_template="Transform this person's hairstyle into a modern quiff with textured volume on top and styled upwards"),
+        StyleOption(name="Undercut", category="hair", description="Disconnected undercut style",
+            prompt_template="Transform this person's hairstyle into an undercut with long hair on top and shaved/very short sides"),
+        StyleOption(name="Man Bun", category="hair", description="Long hair tied in bun",
+            prompt_template="Transform this person's hairstyle into long hair styled in a man bun on top of the head"),
+        StyleOption(name="French Crop", category="hair", description="Short fringe crop",
+            prompt_template="Transform this person's hairstyle into a French crop with short textured fringe and faded sides"),
+        StyleOption(name="Side Part", category="hair", description="Classic side parted style",
+            prompt_template="Transform this person's hairstyle into a classic side part with clean defined part line and combed sides"),
+        StyleOption(name="Caesar Cut", category="hair", description="Short horizontal fringe",
+            prompt_template="Transform this person's hairstyle into a Caesar cut with short horizontal fringe and uniform length"),
+        StyleOption(name="Curly Top", category="hair", description="Natural curly texture on top",
+            prompt_template="Transform this person's hairstyle into curly hair on top with natural texture and faded sides"),
+        StyleOption(name="Full Beard", category="beard", description="Full natural beard",
             image_url="https://images.unsplash.com/photo-1653071163517-4ee6b192260d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person to have a full natural beard covering cheeks, chin and neck with natural growth"
-        ),
-        StyleOption(
-            name="Goatee",
-            category="beard",
-            description="Classic goatee style",
+            prompt_template="Transform this person to have a full natural beard covering cheeks, chin and neck with natural growth"),
+        StyleOption(name="Goatee", category="beard", description="Classic goatee style",
             image_url="https://images.unsplash.com/photo-1653071163695-34ac45a78e28?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwzfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person to have a goatee beard style with hair only on chin and mustache area"
-        ),
-        StyleOption(
-            name="Short Stubble",
-            category="beard",
-            description="Light stubble beard",
+            prompt_template="Transform this person to have a goatee beard style with hair only on chin and mustache area"),
+        StyleOption(name="Short Stubble", category="beard", description="Light stubble beard",
             image_url="https://images.unsplash.com/photo-1653071163845-c5851ddedf95?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww&ixlib=rb-4.1.0&q=85",
-            prompt_template="Transform this person to have short stubble beard, light 2-3 day growth all over face"
-        ),
-        StyleOption(
-            name="Long Beard",
-            category="beard",
-            description="Long flowing beard",
-            prompt_template="Transform this person to have a long flowing beard extending several inches from the chin"
-        ),
-        StyleOption(
-            name="Chinstrap",
-            category="beard",
-            description="Thin beard along jawline",
-            prompt_template="Transform this person to have a chinstrap beard style following the jawline from ear to ear"
-        ),
-        StyleOption(
-            name="Van Dyke",
-            category="beard",
-            description="Goatee with mustache",
-            prompt_template="Transform this person to have a Van Dyke beard style with pointed goatee and disconnected mustache"
-        ),
-        StyleOption(
-            name="Handlebar Mustache",
-            category="beard",
-            description="Styled handlebar mustache",
-            prompt_template="Transform this person to have a handlebar mustache with curled upward ends and no chin beard"
-        ),
-        StyleOption(
-            name="Clean Shaven",
-            category="beard",
-            description="Completely smooth face",
-            prompt_template="Transform this person to be completely clean shaven with smooth skin and no facial hair"
-        ),
-        StyleOption(
-            name="5 O'Clock Shadow",
-            category="beard",
-            description="Very light stubble",
-            prompt_template="Transform this person to have a 5 o'clock shadow with very light stubble barely visible"
-        ),
-        StyleOption(
-            name="Corporate Beard",
-            category="beard",
-            description="Well-groomed professional beard",
-            prompt_template="Transform this person to have a well-groomed corporate beard, neat and professional looking"
-        ),
-        StyleOption(
-            name="Circle Beard",
-            category="beard",
-            description="Mustache connected to goatee",
-            prompt_template="Transform this person to have a circle beard with mustache fully connected to rounded goatee"
-        ),
-        StyleOption(
-            name="Mutton Chops",
-            category="beard",
-            description="Side whiskers style",
-            prompt_template="Transform this person to have mutton chops beard style with large sideburns extending down to corners of mouth"
-        )
+            prompt_template="Transform this person to have short stubble beard, light 2-3 day growth all over face"),
+        StyleOption(name="Long Beard", category="beard", description="Long flowing beard",
+            prompt_template="Transform this person to have a long flowing beard extending several inches from the chin"),
+        StyleOption(name="Chinstrap", category="beard", description="Thin beard along jawline",
+            prompt_template="Transform this person to have a chinstrap beard style following the jawline from ear to ear"),
+        StyleOption(name="Van Dyke", category="beard", description="Goatee with mustache",
+            prompt_template="Transform this person to have a Van Dyke beard style with pointed goatee and disconnected mustache"),
+        StyleOption(name="Handlebar Mustache", category="beard", description="Styled handlebar mustache",
+            prompt_template="Transform this person to have a handlebar mustache with curled upward ends and no chin beard"),
+        StyleOption(name="Clean Shaven", category="beard", description="Completely smooth face",
+            prompt_template="Transform this person to be completely clean shaven with smooth skin and no facial hair"),
+        StyleOption(name="5 O'Clock Shadow", category="beard", description="Very light stubble",
+            prompt_template="Transform this person to have a 5 o'clock shadow with very light stubble barely visible"),
+        StyleOption(name="Corporate Beard", category="beard", description="Well-groomed professional beard",
+            prompt_template="Transform this person to have a well-groomed corporate beard, neat and professional looking"),
+        StyleOption(name="Circle Beard", category="beard", description="Mustache connected to goatee",
+            prompt_template="Transform this person to have a circle beard with mustache fully connected to rounded goatee"),
+        StyleOption(name="Mutton Chops", category="beard", description="Side whiskers style",
+            prompt_template="Transform this person to have mutton chops beard style with large sideburns extending down to corners of mouth")
     ]
     
     for style in styles:
         await db.styles.insert_one(style.model_dump())
 
+async def seed_admin():
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    existing = await db.users.find_one({"email": admin_email})
+    if existing is None:
+        await db.users.insert_one({
+            "email": admin_email,
+            "password_hash": hash_password(admin_password),
+            "name": "Admin",
+            "role": "admin",
+            "favorites": [],
+            "created_at": datetime.now(timezone.utc)
+        })
+    elif not verify_password(admin_password, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+
 @app.on_event("startup")
 async def startup_event():
+    await db.users.create_index("email", unique=True)
     await init_styles()
+    await seed_admin()
 
 @api_router.get("/")
 async def root():
     return {"message": "AI Hair & Beard Studio API"}
 
 @api_router.post("/upload-photo", response_model=UploadPhotoResponse)
-async def upload_photo(file: UploadFile = File(...)):
+async def upload_photo(file: UploadFile = File(...), request: Request = None):
     try:
+        user = None
+        try:
+            user = await get_current_user(request) if request else None
+        except:
+            pass
+        
         contents = await file.read()
         image_base64 = base64.b64encode(contents).decode('utf-8')
         
         photo_id = str(uuid.uuid4())
         photo_doc = {
             "id": photo_id,
+            "user_id": user["_id"] if user else None,
             "image_data": image_base64,
             "filename": file.filename,
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -258,20 +325,38 @@ async def get_styles():
     styles = await db.styles.find({}, {"_id": 0}).to_list(100)
     return styles
 
+@api_router.post("/styles/{style_id}/favorite")
+async def toggle_favorite(style_id: str, request: Request):
+    user = await get_current_user(request)
+    user_id = user["_id"]
+    
+    current_favorites = user.get("favorites", [])
+    if style_id in current_favorites:
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$pull": {"favorites": style_id}})
+        await db.styles.update_one({"id": style_id}, {"$inc": {"favorites_count": -1}})
+        return {"favorited": False}
+    else:
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$addToSet": {"favorites": style_id}})
+        await db.styles.update_one({"id": style_id}, {"$inc": {"favorites_count": 1}})
+        return {"favorited": True}
+
 @api_router.post("/generate", response_model=GeneratedResult)
-async def generate_style(request: GenerateRequest):
+async def generate_style(request_data: GenerateRequest, request: Request):
     try:
-        # Get photo
-        photo = await db.photos.find_one({"id": request.photo_id}, {"_id": 0})
+        user = None
+        try:
+            user = await get_current_user(request)
+        except:
+            pass
+        
+        photo = await db.photos.find_one({"id": request_data.photo_id}, {"_id": 0})
         if not photo:
             raise HTTPException(status_code=404, detail="Photo not found")
         
-        # Get style
-        style = await db.styles.find_one({"id": request.style_id}, {"_id": 0})
+        style = await db.styles.find_one({"id": request_data.style_id}, {"_id": 0})
         if not style:
             raise HTTPException(status_code=404, detail="Style not found")
         
-        # Generate with AI
         api_key = os.getenv("EMERGENT_LLM_KEY")
         session_id = f"session-{uuid.uuid4()}"
         chat = LlmChat(api_key=api_key, session_id=session_id, system_message="You are a professional hair and beard styling AI assistant.")
@@ -289,13 +374,14 @@ async def generate_style(request: GenerateRequest):
         
         generated_image = images[0]['data']
         
-        # Save result
         result = GeneratedResult(
-            photo_id=request.photo_id,
-            style_id=request.style_id,
+            user_id=user["_id"] if user else None,
+            photo_id=request_data.photo_id,
+            style_id=request_data.style_id,
             style_name=style["name"],
             original_image=photo["image_data"],
-            generated_image=generated_image
+            generated_image=generated_image,
+            is_public=False
         )
         
         result_dict = result.model_dump()
@@ -309,8 +395,15 @@ async def generate_style(request: GenerateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/history", response_model=List[HistoryItem])
-async def get_history():
-    results = await db.results.find({}, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
+async def get_history(request: Request):
+    user = None
+    try:
+        user = await get_current_user(request)
+    except:
+        pass
+    
+    query = {"user_id": user["_id"]} if user else {}
+    results = await db.results.find(query, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
     
     history = []
     for r in results:
@@ -320,10 +413,51 @@ async def get_history():
             id=r['id'],
             style_name=r['style_name'],
             generated_image=r['generated_image'],
+            is_public=r.get('is_public', False),
+            likes=r.get('likes', 0),
             created_at=r['created_at']
         ))
     
     return history
+
+@api_router.get("/gallery/public", response_model=List[HistoryItem])
+async def get_public_gallery():
+    results = await db.results.find({"is_public": True}, {"_id": 0}).sort("likes", -1).limit(50).to_list(50)
+    
+    gallery = []
+    for r in results:
+        if isinstance(r['created_at'], str):
+            r['created_at'] = datetime.fromisoformat(r['created_at'])
+        gallery.append(HistoryItem(
+            id=r['id'],
+            style_name=r['style_name'],
+            generated_image=r['generated_image'],
+            is_public=r.get('is_public', False),
+            likes=r.get('likes', 0),
+            created_at=r['created_at']
+        ))
+    
+    return gallery
+
+@api_router.post("/result/{result_id}/public")
+async def toggle_public(result_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.results.find_one({"id": result_id, "user_id": user["_id"]})
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    
+    new_status = not result.get("is_public", False)
+    await db.results.update_one({"id": result_id}, {"$set": {"is_public": new_status}})
+    return {"is_public": new_status}
+
+@api_router.post("/result/{result_id}/like")
+async def like_result(result_id: str):
+    result = await db.results.find_one({"id": result_id})
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    
+    await db.results.update_one({"id": result_id}, {"$inc": {"likes": 1}})
+    return {"likes": result.get("likes", 0) + 1}
 
 @api_router.get("/result/{result_id}")
 async def get_result(result_id: str):
@@ -341,7 +475,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[os.environ.get('FRONTEND_URL', 'https://virtual-barber-8.preview.emergentagent.com')],
     allow_methods=["*"],
     allow_headers=["*"],
 )

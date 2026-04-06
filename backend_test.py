@@ -14,6 +14,8 @@ class HairBeardStudioAPITester:
         self.photo_id = None
         self.style_id = None
         self.result_id = None
+        self.session = requests.Session()  # Use session to maintain cookies
+        self.user_id = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, files=None):
         """Run a single API test"""
@@ -26,12 +28,12 @@ class HairBeardStudioAPITester:
         
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers)
+                response = self.session.get(url, headers=headers)
             elif method == 'POST':
                 if files:
-                    response = requests.post(url, files=files)
+                    response = self.session.post(url, files=files)
                 else:
-                    response = requests.post(url, json=data, headers=headers)
+                    response = self.session.post(url, json=data, headers=headers)
 
             success = response.status_code == expected_status
             if success:
@@ -181,20 +183,177 @@ class HairBeardStudioAPITester:
             return True
         return False
 
+    # NEW AUTHENTICATION TESTS
+    def test_register_user(self):
+        """Test user registration"""
+        test_email = f"test_{datetime.now().strftime('%H%M%S')}@test.com"
+        success, response = self.run_test(
+            "Register New User",
+            "POST",
+            "auth/register",
+            200,
+            data={
+                "name": "Test User",
+                "email": test_email,
+                "password": "testpass123"
+            }
+        )
+        
+        if success and 'id' in response:
+            self.user_id = response['id']
+            print(f"   User registered with ID: {self.user_id}")
+            print(f"   User email: {response['email']}")
+            return True
+        return False
+
+    def test_login_admin(self):
+        """Test admin login with credentials from test_credentials.md"""
+        success, response = self.run_test(
+            "Admin Login",
+            "POST",
+            "auth/login",
+            200,
+            data={
+                "email": "admin@hairbeard.studio",
+                "password": "admin123"
+            }
+        )
+        
+        if success and 'id' in response:
+            self.user_id = response['id']
+            print(f"   Admin logged in with ID: {self.user_id}")
+            print(f"   Admin role: {response.get('role', 'user')}")
+            return True
+        return False
+
+    def test_get_current_user(self):
+        """Test getting current authenticated user"""
+        success, response = self.run_test(
+            "Get Current User",
+            "GET",
+            "auth/me",
+            200
+        )
+        
+        if success and 'id' in response:
+            print(f"   Current user: {response['name']} ({response['email']})")
+            return True
+        return False
+
+    def test_logout(self):
+        """Test user logout"""
+        success, response = self.run_test(
+            "User Logout",
+            "POST",
+            "auth/logout",
+            200
+        )
+        
+        if success:
+            print("   User logged out successfully")
+            return True
+        return False
+
+    # NEW FAVORITES TESTS
+    def test_toggle_favorite(self):
+        """Test toggling style favorite"""
+        if not self.style_id:
+            print("❌ Cannot test favorite - missing style_id")
+            return False
+        
+        success, response = self.run_test(
+            "Toggle Style Favorite",
+            "POST",
+            f"styles/{self.style_id}/favorite",
+            200
+        )
+        
+        if success and 'favorited' in response:
+            print(f"   Style favorited: {response['favorited']}")
+            return True
+        return False
+
+    # NEW PUBLIC GALLERY TESTS
+    def test_get_public_gallery(self):
+        """Test getting public gallery"""
+        success, response = self.run_test(
+            "Get Public Gallery",
+            "GET",
+            "gallery/public",
+            200
+        )
+        
+        if success and isinstance(response, list):
+            print(f"   Found {len(response)} public results")
+            return True
+        return False
+
+    def test_toggle_result_public(self):
+        """Test toggling result public status"""
+        if not self.result_id:
+            print("❌ Cannot test public toggle - missing result_id")
+            return False
+        
+        success, response = self.run_test(
+            "Toggle Result Public",
+            "POST",
+            f"result/{self.result_id}/public",
+            200
+        )
+        
+        if success and 'is_public' in response:
+            print(f"   Result is now public: {response['is_public']}")
+            return True
+        return False
+
+    def test_like_result(self):
+        """Test liking a result"""
+        if not self.result_id:
+            print("❌ Cannot test like - missing result_id")
+            return False
+        
+        success, response = self.run_test(
+            "Like Result",
+            "POST",
+            f"result/{self.result_id}/like",
+            200
+        )
+        
+        if success and 'likes' in response:
+            print(f"   Result now has {response['likes']} likes")
+            return True
+        return False
+
 def main():
-    print("🚀 Starting AI Hair & Beard Studio API Tests")
-    print("=" * 50)
+    print("🚀 Starting AI Hair & Beard Studio API Tests (Updated with Auth & Social Features)")
+    print("=" * 70)
     
     tester = HairBeardStudioAPITester()
     
     # Run all tests in sequence
     tests = [
+        # Basic API tests
         tester.test_root_endpoint,
         tester.test_get_styles,
         tester.test_upload_photo,
+        
+        # Authentication tests
+        tester.test_register_user,
+        tester.test_get_current_user,
+        tester.test_logout,
+        tester.test_login_admin,
+        tester.test_get_current_user,
+        
+        # Core functionality tests (with auth)
         tester.test_generate_style,
         tester.test_get_history,
-        tester.test_get_result
+        tester.test_get_result,
+        
+        # Social features tests
+        tester.test_toggle_favorite,
+        tester.test_toggle_result_public,
+        tester.test_get_public_gallery,
+        tester.test_like_result,
     ]
     
     for test in tests:
@@ -205,7 +364,7 @@ def main():
             tester.tests_run += 1
     
     # Print final results
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 70)
     print(f"📊 Test Results: {tester.tests_passed}/{tester.tests_run} passed")
     
     if tester.tests_passed == tester.tests_run:
