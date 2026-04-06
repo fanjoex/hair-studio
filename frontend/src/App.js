@@ -314,9 +314,9 @@ function TutorialDialog({ open, onClose }) {
           <h2 className="heading-2 mb-3">{steps[step].title}</h2>
           <p className="body-text mb-6">{steps[step].description}</p>
           <div className="flex gap-2 justify-center mb-4">
-            {steps.map((_, i) => (
+            {steps.map((stepItem, i) => (
               <div
-                key={i}
+                key={`tutorial-step-${i}`}
                 className={`h-2 rounded-full transition-all ${
                   i === step ? "w-8 bg-primary" : "w-2 bg-zinc-700"
                 }`}
