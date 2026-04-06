@@ -502,6 +502,18 @@ function App() {
     setSliderPosition(Math.max(0, Math.min(100, percentage)));
   };
 
+  // Touch events for mobile
+  const handleTouchStart = () => setIsDragging(true);
+  const handleTouchEnd = () => setIsDragging(false);
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const percentage = (x / rect.width) * 100;
+    setSliderPosition(Math.max(0, Math.min(100, percentage)));
+  };
+
   const handleShare = async () => {
     if (!generatedResult) return;
     
@@ -708,12 +720,16 @@ function App() {
               </div>
               
               <div 
-                className="relative w-full aspect-square max-h-[600px] rounded-xl overflow-hidden"
+                className="relative w-full aspect-square max-h-[600px] rounded-xl overflow-hidden touch-none select-none"
                 onMouseMove={handleMouseMove}
                 onMouseDown={handleMouseDown}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 data-testid="before-after-slider"
+                style={{ touchAction: 'none' }}
               >
                 <img 
                   src={`data:image/png;base64,${generatedResult.generated_image}`}
@@ -733,12 +749,12 @@ function App() {
                 </div>
                 
                 <div 
-                  className="absolute top-0 bottom-0 w-1 bg-white/80 cursor-ew-resize"
+                  className="absolute top-0 bottom-0 w-1 bg-white/80 cursor-ew-resize touch-none"
                   style={{ left: `${sliderPosition}%` }}
                 >
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg">
-                    <ChevronLeft className="w-4 h-4 text-black absolute left-0" />
-                    <ChevronRight className="w-4 h-4 text-black absolute right-0" />
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg border-2 border-zinc-800">
+                    <ChevronLeft className="w-5 h-5 text-black absolute left-1" />
+                    <ChevronRight className="w-5 h-5 text-black absolute right-1" />
                   </div>
                 </div>
                 
