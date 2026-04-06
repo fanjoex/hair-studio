@@ -10,14 +10,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+// Get backend URL with proper fallback
+const getBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  
+  // Check if env URL is valid
+  if (envUrl && envUrl !== 'undefined' && envUrl.startsWith('http')) {
+    return envUrl;
+  }
+  
+  // Fallback to current origin
+  console.warn('Using window.location.origin as backend URL');
+  return window.location.origin;
+};
+
+const BACKEND_URL = getBackendUrl();
 const API = `${BACKEND_URL}/api`;
 
-// Validate API URL
-if (!BACKEND_URL || BACKEND_URL === 'undefined') {
-  console.error('BACKEND_URL is not properly configured:', BACKEND_URL);
-  toast.error('Erro de configuração. Recarregue a página.');
-}
+console.log('Backend URL configured:', BACKEND_URL);
 
 axios.defaults.withCredentials = true;
 
@@ -31,6 +41,57 @@ const formatApiErrorDetail = (detail) => {
   if (detail && typeof detail.msg === "string") return detail.msg;
   return String(detail);
 };
+
+function ErrorBoundary({ children }) {
+  const [hasError, setHasError] = useState(false);
+  const [errorInfo, setErrorInfo] = useState(null);
+
+  useEffect(() => {
+    const handleError = (error) => {
+      console.error('Error caught:', error);
+      if (error.message?.includes('undefined') || error.message?.includes('Network')) {
+        setHasError(true);
+        setErrorInfo(error.message);
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full card p-8 text-center">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h1 className="heading-2 mb-4">Erro de Conexão</h1>
+          <p className="body-text mb-6">
+            Não foi possível conectar ao servidor. Por favor:
+          </p>
+          <div className="text-left space-y-2 mb-6">
+            <p className="text-sm text-zinc-400">1. Verifique sua conexão com internet</p>
+            <p className="text-sm text-zinc-400">2. Limpe o cache do navegador</p>
+            <p className="text-sm text-zinc-400">3. Recarregue a página</p>
+          </div>
+          <Button 
+            onClick={() => {
+              setHasError(false);
+              window.location.reload();
+            }}
+            className="w-full"
+          >
+            🔄 Recarregar Página
+          </Button>
+          {errorInfo && (
+            <p className="text-xs text-zinc-600 mt-4 font-mono">{errorInfo}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+}
 
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -875,9 +936,11 @@ function App() {
 
 function AppWithAuth() {
   return (
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

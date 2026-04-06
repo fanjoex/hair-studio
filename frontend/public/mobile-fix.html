@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hair & Beard Studio - Versão Mobile</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #09090b;
+            color: #fafafa;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: #18181b;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header h1 {
+            font-size: 1.2rem;
+            color: #E4A853;
+        }
+        
+        .container {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .card h2 {
+            color: #E4A853;
+            margin-bottom: 16px;
+            font-size: 1.5rem;
+        }
+        
+        .card p {
+            color: #a1a1aa;
+            margin-bottom: 12px;
+        }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            background: #E4A853;
+            color: #000;
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        
+        .btn:active {
+            background: #f3c077;
+        }
+        
+        .btn-secondary {
+            background: #27272a;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .status.error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        .status-icon {
+            font-size: 1.5rem;
+        }
+        
+        .steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+        
+        .steps li {
+            counter-increment: step-counter;
+            padding: 12px 0;
+            padding-left: 40px;
+            position: relative;
+            color: #a1a1aa;
+        }
+        
+        .steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 28px;
+            height: 28px;
+            background: #E4A853;
+            color: #000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .info-box strong {
+            color: #60a5fa;
+        }
+        
+        code {
+            background: #000;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #E4A853;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🪒 AI Hair & Beard Studio</h1>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h2>⚠️ Problema Detectado</h2>
+            <div id="status" class="status error">
+                <span class="status-icon">❌</span>
+                <span>Erro ao carregar a aplicação</span>
+            </div>
+            
+            <p>Parece que você está com problemas para acessar o app. Vamos resolver isso!</p>
+        </div>
+        
+        <div class="card">
+            <h2>🔧 Solução Rápida</h2>
+            <p>Siga estes passos para limpar o cache no Android:</p>
+            
+            <ol class="steps">
+                <li>Abra as <strong>Configurações do Chrome</strong> (toque nos 3 pontinhos ⋮)</li>
+                <li>Vá em <strong>Privacidade e segurança</strong></li>
+                <li>Toque em <strong>Limpar dados de navegação</strong></li>
+                <li>Marque <strong>Cookies</strong> e <strong>Cache</strong></li>
+                <li>Selecione <strong>Todo o período</strong></li>
+                <li>Toque em <strong>Limpar dados</strong></li>
+            </ol>
+            
+            <button class="btn" onclick="clearAndReload()">
+                🔄 Limpar Cache e Recarregar
+            </button>
+        </div>
+        
+        <div class="card">
+            <h2>🎯 Atalho Rápido</h2>
+            <p>Se o método acima não funcionar, tente este atalho:</p>
+            
+            <div class="info-box">
+                <strong>Passo a passo:</strong><br>
+                1. Toque no ícone do <strong>cadeado 🔒</strong> na barra de endereço<br>
+                2. Toque em <strong>"Configurações do site"</strong><br>
+                3. Toque em <strong>"Limpar e redefinir"</strong>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="testConnection()">
+                🔍 Testar Conexão
+            </button>
+        </div>
+        
+        <div class="card">
+            <h2>🌐 Outras Opções</h2>
+            
+            <p style="margin-bottom: 16px;">Se nada funcionar, tente:</p>
+            
+            <button class="btn btn-secondary" onclick="openIncognito()">
+                🕵️ Abrir em Aba Anônima
+            </button>
+            
+            <button class="btn btn-secondary" onclick="checkHealth()">
+                ❤️ Verificar Status do Servidor
+            </button>
+            
+            <button class="btn btn-secondary" onclick="copyUrl()">
+                📋 Copiar Link do App
+            </button>
+        </div>
+        
+        <div class="card">
+            <h2>ℹ️ Informações Técnicas</h2>
+            <p style="font-size: 0.9rem; color: #71717a;">
+                <strong>Erro:</strong> Domain: undefined<br>
+                <strong>Causa:</strong> Cache desatualizado do navegador<br>
+                <strong>Navegador:</strong> <span id="browser">Detectando...</span><br>
+                <strong>URL Atual:</strong> <code id="current-url">Carregando...</code>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        // Detect browser
+        const ua = navigator.userAgent;
+        let browserName = 'Desconhecido';
+        if (ua.includes('Chrome')) browserName = 'Chrome';
+        else if (ua.includes('Firefox')) browserName = 'Firefox';
+        else if (ua.includes('SamsungBrowser')) browserName = 'Samsung Internet';
+        else if (ua.includes('Safari')) browserName = 'Safari';
+        
+        document.getElementById('browser').textContent = browserName;
+        document.getElementById('current-url').textContent = window.location.hostname;
+        
+        function clearAndReload() {
+            if (confirm('Isso vai recarregar a página. Deseja continuar?')) {
+                // Try to clear localStorage
+                try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                } catch (e) {}
+                
+                // Reload with cache bypass
+                window.location.reload(true);
+            }
+        }
+        
+        function testConnection() {
+            const status = document.getElementById('status');
+            status.innerHTML = '<span class="status-icon">⏳</span><span>Testando conexão...</span>';
+            
+            fetch('/api/')
+                .then(response => response.json())
+                .then(data => {
+                    status.className = 'status';
+                    status.innerHTML = '<span class="status-icon">✅</span><span>Conexão OK! Recarregue a página.</span>';
+                    setTimeout(() => {
+                        if (confirm('Servidor está online! Deseja ir para o app?')) {
+                            window.location.href = '/';
+                        }
+                    }, 1000);
+                })
+                .catch(error => {
+                    status.className = 'status error';
+                    status.innerHTML = '<span class="status-icon">❌</span><span>Servidor offline ou sem internet</span>';
+                });
+        }
+        
+        function openIncognito() {
+            alert('Por favor, abra o navegador em modo anônimo/privado manualmente e acesse:\n\n' + window.location.origin);
+        }
+        
+        function checkHealth() {
+            window.location.href = '/health.html';
+        }
+        
+        function copyUrl() {
+            const url = window.location.origin;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(url).then(() => {
+                    alert('Link copiado! Cole em uma nova aba anônima.');
+                });
+            } else {
+                alert('Link do app:\n\n' + url + '\n\nCopie e cole em uma nova aba anônima.');
+            }
+        }
+        
+        // Auto test connection on load
+        setTimeout(testConnection, 1000);
+    </script>
+</body>
+</html>
