@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Conexão</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #09090b;
+            color: #fafafa;
+            padding: 20px;
+            text-align: center;
+        }
+        .btn {
+            background: #E4A853;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            margin: 10px;
+            cursor: pointer;
+            display: inline-block;
+            text-decoration: none;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: #18181b;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Diagnóstico de Conexão</h1>
+    
+    <div class="status" id="status">
+        Testando conexão...
+    </div>
+    
+    <h2>URLs para testar:</h2>
+    
+    <a href="https://virtual-barber-8.preview.emergentagent.com" class="btn">
+        URL Principal
+    </a>
+    <br>
+    
+    <button class="btn" onclick="testAPI()">
+        Testar API
+    </button>
+    
+    <div class="status" id="result"></div>
+    
+    <h2>Possíveis soluções:</h2>
+    <ol style="text-align: left; max-width: 600px; margin: 20px auto;">
+        <li><strong>Troque de WiFi para 4G</strong> (ou vice-versa)</li>
+        <li><strong>Desative VPN</strong> se estiver usando</li>
+        <li><strong>Mude DNS:</strong> Configurações → WiFi → Avançado → DNS: 8.8.8.8</li>
+        <li><strong>Modo avião ON/OFF</strong> para resetar rede</li>
+        <li><strong>Reinicie o celular</strong></li>
+    </ol>
+    
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = 'Testando...';
+            
+            try {
+                const response = await fetch('/api/');
+                const data = await response.json();
+                resultDiv.innerHTML = '<div style="color: #22c55e">✓ API está respondendo!<br>' + JSON.stringify(data) + '</div>';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } catch (error) {
+                resultDiv.innerHTML = '<div style="color: #ef4444">✗ Erro: ' + error.message + '<br>Tente as soluções abaixo</div>';
+            }
+        }
+        
+        testAPI();
+        
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerHTML = `
+            <strong>Sua conexão:</strong><br>
+            Online: ${navigator.onLine ? 'Sim ✓' : 'Não ✗'}<br>
+            User Agent: ${navigator.userAgent.substring(0, 50)}...
+        `;
+    </script>
+</body>
+</html>
