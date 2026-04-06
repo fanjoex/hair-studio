@@ -1,34 +1,159 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+body {
+  font-family: 'Manrope', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
 }
 
-.App-link {
-    color: #61dafb;
+.heading-1 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: #fafafa;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+@media (min-width: 640px) {
+  .heading-1 {
+    font-size: 3rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .heading-1 {
+    font-size: 3.75rem;
+  }
+}
+
+.heading-2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: #fafafa;
+}
+
+@media (min-width: 640px) {
+  .heading-2 {
+    font-size: 1.875rem;
+  }
+}
+
+.heading-3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fafafa;
+}
+
+.body-text {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  line-height: 1.6;
+}
+
+.small-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.bg-background {
+  background-color: #09090b;
+}
+
+.bg-surface {
+  background-color: #18181b;
+}
+
+.bg-surface-hover {
+  background-color: #27272a;
+}
+
+.text-primary {
+  color: #E4A853;
+}
+
+.text-muted {
+  color: #71717a;
+}
+
+.border-border {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.upload-zone {
+  border: 2px dashed #3f3f46;
+  background-color: rgba(24, 24, 27, 0.3);
+  border-radius: 1.5rem;
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-zone:hover {
+  border-color: rgba(228, 168, 83, 0.5);
+  background-color: rgba(24, 24, 27, 0.5);
+}
+
+.card {
+  background-color: rgba(24, 24, 27, 0.5);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 20px rgba(228, 168, 83, 0.1);
+}
+
+.style-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.style-item:hover {
+  transform: translateY(-2px);
+}
+
+.style-item.active {
+  border-color: #E4A853;
+  box-shadow: 0 0 15px rgba(228, 168, 83, 0.3);
+}
+
+.style-item img {
+  transition: transform 0.3s ease;
+}
+
+.style-item:hover img {
+  transform: scale(1.05);
 }
