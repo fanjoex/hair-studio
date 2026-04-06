@@ -1,0 +1,155 @@
+{
+  "project_name": "AI Hair \u0026 Beard Studio",
+  "theme": "Dark",
+  "archetype": "Archetype 5 (Jewel \u0026 Luxury) meets Archetype 4 (High-Contrast Tech)",
+  "emotional_tone": "Premium, masculine, modern, precise, cinematic. A digital high-end barbershop.",
+  "colors": {
+    "background": {
+      "base": "#09090b",
+      "surface": "#18181b",
+      "surface_hover": "#27272a",
+      "panel": "rgba(24, 24, 27, 0.7)"
+    },
+    "primary": {
+      "default": "#E4A853",
+      "hover": "#f3c077",
+      "foreground": "#000000"
+    },
+    "accent": {
+      "blue": "#3b82f6",
+      "glow": "rgba(228, 168, 83, 0.15)"
+    },
+    "border": {
+      "default": "rgba(255, 255, 255, 0.08)",
+      "focus": "rgba(228, 168, 83, 0.5)"
+    },
+    "text": {
+      "primary": "#fafafa",
+      "secondary": "#a1a1aa",
+      "muted": "#71717a"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Outfit, sans-serif",
+      "body": "Manrope, sans-serif"
+    },
+    "rules": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight text-white",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-white",
+      "h3": "text-xl font-semibold text-white",
+      "body": "text-base font-medium text-zinc-400 leading-relaxed",
+      "small": "text-sm font-medium text-zinc-500 uppercase tracking-[0.1em]",
+      "banned_fonts": ["Inter", "Roboto", "Open Sans"]
+    }
+  },
+  "layout_and_spacing": {
+    "philosophy": "Dashboard Control Room layout with generous internal padding. Mobile is stacked, Desktop is multi-pane.",
+    "grid_system": "grid-cols-1 md:grid-cols-12 gap-6 md:gap-8",
+    "structure_desktop": {
+      "sidebar": "col-span-2 or w-20 fixed vertical nav",
+      "main_workspace": "col-span-7 flex flex-col gap-6",
+      "settings_panel": "col-span-3 flex flex-col gap-4 border-l border-zinc-800 p-6"
+    },
+    "padding_scale": {
+      "container": "p-6 md:p-8",
+      "card": "p-4 md:p-6"
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "bg-zinc-900/50 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden",
+      "hover": "hover:border-white/20 transition-all duration-300 hover:shadow-[0_0_20px_rgba(228,168,83,0.1)]"
+    },
+    "upload_zone": {
+      "style": "border-2 border-dashed border-zinc-700 bg-zinc-900/30 rounded-3xl p-12 flex flex-col items-center justify-center text-center cursor-pointer",
+      "hover": "hover:border-primary/50 hover:bg-zinc-900/50 transition-colors"
+    },
+    "style_selector_item": {
+      "style": "relative aspect-square rounded-xl overflow-hidden border-2 border-transparent cursor-pointer group",
+      "active": "border-primary shadow-[0_0_15px_rgba(228,168,83,0.3)]",
+      "overlay": "absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors"
+    },
+    "buttons": {
+      "primary": "bg-primary text-black font-bold rounded-full px-6 py-3 hover:bg-primary-hover hover:scale-105 transition-all shadow-[0_0_15px_rgba(228,168,83,0.2)]",
+      "secondary": "bg-zinc-800 text-white font-medium rounded-full px-6 py-3 hover:bg-zinc-700 border border-zinc-700 transition-all"
+    },
+    "before_after_slider": {
+      "handle": "w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg border border-zinc-200 text-black",
+      "line": "w-0.5 bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Used for sticky bottom bars (mobile) or floating action panels. Use backdrop-blur-2xl bg-zinc-950/60 border-t border-white/5.",
+    "glow_effects": "Subtle radial glows behind the main active photo viewer using the accent color.",
+    "textures": "Add a very faint noise SVG overlay to the background to break the digital flatness."
+  },
+  "media": {
+    "instructions": "Use these strictly in the UI. Missing assets will break the immersion. Do NOT use placeholder text. Map each category to the appropriate section.",
+    "categories": {
+      "hero_landing_background": {
+        "description": "Background for the welcome or auth screen. Large cinematic barbershop/haircut shot.",
+        "url": "https://static.prod-images.emergentagent.com/jobs/e1aefc8f-d8b1-4603-8480-8406587e226d/images/6b7221cd4f7699d461b5a7236696509c695951e5e4a3318a6e7464a6b04b23fc.png"
+      },
+      "ai_transformation_demo": {
+        "description": "Main showcase image in the landing or 'How it works' section showing before/after.",
+        "url": "https://static.prod-images.emergentagent.com/jobs/e1aefc8f-d8b1-4603-8480-8406587e226d/images/b7b462c239fdaaffa495ee5d444935249149e866ebea82566f4487703ac7e868.png"
+      },
+      "style_gallery_haircuts": [
+        {
+          "description": "Modern fade",
+          "url": "https://images.unsplash.com/photo-1769071167442-3b67ea1eb769?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA\u0026ixlib=rb-4.1.0\u0026q=85"
+        },
+        {
+          "description": "Textured crop",
+          "url": "https://images.unsplash.com/photo-1772798921699-69445b09c598?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwxfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA\u0026ixlib=rb-4.1.0\u0026q=85"
+        },
+        {
+          "description": "Slick back",
+          "url": "https://images.unsplash.com/photo-1769072058450-ac7cc0d0a541?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwyfHxtYW4lMjBtb2Rlcm4lMjBoYWlyY3V0JTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1NDc4MDk1fDA\u0026ixlib=rb-4.1.0\u0026q=85"
+        }
+      ],
+      "style_gallery_beards": [
+        {
+          "description": "Full beard",
+          "url": "https://images.unsplash.com/photo-1653071163517-4ee6b192260d?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwyfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww\u0026ixlib=rb-4.1.0\u0026q=85"
+        },
+        {
+          "description": "Goatee style",
+          "url": "https://images.unsplash.com/photo-1653071163695-34ac45a78e28?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwzfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww\u0026ixlib=rb-4.1.0\u0026q=85"
+        },
+        {
+          "description": "Short stubble",
+          "url": "https://images.unsplash.com/photo-1653071163845-c5851ddedf95?crop=entropy\u0026cs=srgb\u0026fm=jpg\u0026ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxtYW4lMjBiZWFyZCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NTQ3ODA5NXww\u0026ixlib=rb-4.1.0\u0026q=85"
+        }
+      ]
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Use stroke-width 1.5. Sizes typically w-5 h-5 for buttons, w-8 h-8 for empty states. Use scissors, camera, image, history, share-2, download."
+  },
+  "accessibility_and_testing": {
+    "test_ids": [
+      "upload-photo-zone",
+      "hair-style-grid",
+      "beard-style-grid",
+      "generate-ai-button",
+      "before-after-slider",
+      "save-to-profile-button",
+      "share-social-button",
+      "history-gallery"
+    ],
+    "contrast": "Ensure white text on dark gray surfaces meets 4.5:1 ratio. Provide focus rings for all interactive elements (ring-2 ring-primary)."
+  },
+  "instructions_to_main_agent": [
+    "1. Setup the basic layout: A dashboard approach with a main viewer area and a scrollable side panel for selecting the 20+ styles.",
+    "2. Implement a 'React Compare Slider' component (or build a custom one) in the main viewer for the side-by-side Before/After comparison.",
+    "3. Use the provided Unsplash images to populate the 'Haircuts' and 'Beards' gallery options.",
+    "4. For the upload area, use a large, welcoming drag-and-drop zone that replaces itself with the main workspace once an image is uploaded.",
+    "5. Use 'Outfit' for all Headings and 'Manrope' for body text. Install these via Google Fonts.",
+    "6. Build a 'History' section or timeline that shows previous attempts (thumbnails).",
+    "7. Strictly apply the `data-testid` attributes to interactive elements to ensure the app passes testing.",
+    "8. Ensure there is a prominent 'Share' and 'Save' button overlaying or underneath the active result image."
+  ]
+}
