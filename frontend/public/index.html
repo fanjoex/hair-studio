@@ -22,6 +22,12 @@
         Learn how to configure a non-root public URL by running `npm run build`.
         -->
         <title>Emergent | Fullstack App</title>
+        <script>
+            // Force backend URL to always be window.location.origin
+            // This ensures it works even if env vars are not properly compiled
+            window.__BACKEND_URL__ = window.location.origin;
+            console.log('Backend URL set to:', window.__BACKEND_URL__);
+        </script>
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>

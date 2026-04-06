@@ -12,22 +12,31 @@ import { toast } from "sonner";
 
 // Get backend URL with proper fallback
 const getBackendUrl = () => {
-  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  // Priority 1: Use global variable set in index.html (always works)
+  if (window.__BACKEND_URL__) {
+    console.log('Using __BACKEND_URL__:', window.__BACKEND_URL__);
+    return window.__BACKEND_URL__;
+  }
   
-  // Check if env URL is valid
+  // Priority 2: Try environment variable
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
   if (envUrl && envUrl !== 'undefined' && envUrl.startsWith('http')) {
+    console.log('Using REACT_APP_BACKEND_URL:', envUrl);
     return envUrl;
   }
   
-  // Fallback to current origin
-  console.warn('Using window.location.origin as backend URL');
+  // Priority 3: Fallback to current origin (always works)
+  console.warn('Using window.location.origin as fallback:', window.location.origin);
   return window.location.origin;
 };
 
 const BACKEND_URL = getBackendUrl();
 const API = `${BACKEND_URL}/api`;
 
-console.log('Backend URL configured:', BACKEND_URL);
+console.log('=== BACKEND CONFIGURATION ===');
+console.log('Backend URL:', BACKEND_URL);
+console.log('API URL:', API);
+console.log('============================');
 
 axios.defaults.withCredentials = true;
 
