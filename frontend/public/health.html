@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hair & Beard Studio - Health Check</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #09090b;
+            color: #fafafa;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #E4A853;
+            margin-bottom: 30px;
+            font-size: 2rem;
+        }
+        
+        .status-card {
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .status-card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #E4A853;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            color: #a1a1aa;
+        }
+        
+        .status-value {
+            color: #fafafa;
+            font-family: monospace;
+        }
+        
+        .status-ok {
+            color: #22c55e;
+        }
+        
+        .status-error {
+            color: #ef4444;
+        }
+        
+        button {
+            background: #E4A853;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            background: #f3c077;
+        }
+        
+        .loading {
+            color: #a1a1aa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 AI Hair & Beard Studio - Health Check</h1>
+        
+        <div class="status-card">
+            <h2>Frontend Status</h2>
+            <div class="status-item">
+                <span class="status-label">Status:</span>
+                <span class="status-value status-ok">✓ Online</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">URL:</span>
+                <span class="status-value" id="frontend-url">Carregando...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">User Agent:</span>
+                <span class="status-value" id="user-agent">Carregando...</span>
+            </div>
+        </div>
+        
+        <div class="status-card">
+            <h2>Backend API</h2>
+            <div class="status-item">
+                <span class="status-label">Status:</span>
+                <span class="status-value loading" id="backend-status">Verificando...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">URL:</span>
+                <span class="status-value" id="backend-url">Carregando...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Response Time:</span>
+                <span class="status-value" id="response-time">-</span>
+            </div>
+        </div>
+        
+        <div class="status-card">
+            <h2>Environment</h2>
+            <div class="status-item">
+                <span class="status-label">REACT_APP_BACKEND_URL:</span>
+                <span class="status-value" id="env-backend-url">N/A (compiled)</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Window Location:</span>
+                <span class="status-value" id="window-location">Carregando...</span>
+            </div>
+        </div>
+        
+        <button onclick="window.location.href='/'">← Voltar ao App</button>
+        <button onclick="location.reload()">🔄 Recarregar</button>
+    </div>
+    
+    <script>
+        // Update frontend info
+        document.getElementById('frontend-url').textContent = window.location.origin;
+        document.getElementById('window-location').textContent = window.location.href;
+        document.getElementById('user-agent').textContent = navigator.userAgent;
+        
+        // Check backend
+        async function checkBackend() {
+            const backendUrl = window.location.origin;
+            const apiUrl = `${backendUrl}/api/`;
+            
+            document.getElementById('backend-url').textContent = apiUrl;
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(apiUrl);
+                const endTime = Date.now();
+                const data = await response.json();
+                
+                if (response.ok && data.message) {
+                    document.getElementById('backend-status').innerHTML = '<span class="status-ok">✓ Online</span>';
+                    document.getElementById('response-time').textContent = `${endTime - startTime}ms`;
+                } else {
+                    throw new Error('Invalid response');
+                }
+            } catch (error) {
+                document.getElementById('backend-status').innerHTML = '<span class="status-error">✗ Offline</span>';
+                document.getElementById('response-time').textContent = 'N/A';
+                console.error('Backend check failed:', error);
+            }
+        }
+        
+        checkBackend();
+    </script>
+</body>
+</html>

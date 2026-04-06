@@ -10,8 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
 const API = `${BACKEND_URL}/api`;
+
+// Validate API URL
+if (!BACKEND_URL || BACKEND_URL === 'undefined') {
+  console.error('BACKEND_URL is not properly configured:', BACKEND_URL);
+  toast.error('Erro de configuração. Recarregue a página.');
+}
 
 axios.defaults.withCredentials = true;
 
@@ -39,7 +45,13 @@ function AuthProvider({ children }) {
       const { data } = await axios.get(`${API}/auth/me`);
       setUser(data);
     } catch (e) {
-      setUser(false);
+      // 401 is expected when not logged in
+      if (e.response?.status === 401) {
+        setUser(false);
+      } else {
+        console.error('Auth check error:', e);
+        setUser(false);
+      }
     } finally {
       setLoading(false);
     }
