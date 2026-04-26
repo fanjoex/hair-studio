@@ -444,15 +444,19 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         # Strong instruction so Gemini stays faithful to the reference image
         if style_image_part is not None:
             instruction = (
-                "You will receive TWO images:\n"
-                "  1) A photo of a real person (the customer).\n"
-                "  2) A reference image showing the EXACT haircut/beard style to apply.\n\n"
-                "Generate a NEW photo of the SAME person from image 1, but with the haircut "
-                "and/or beard EXACTLY as shown in image 2. Be faithful to the reference: "
-                "match length, shape, fade/taper, parting, texture, volume, sideburns and beard outline.\n"
-                "STRICTLY PRESERVE from image 1: face identity, facial features, skin tone, "
-                "expression, eye direction, head pose, lighting, camera angle, framing and background.\n"
-                "Do not add or remove accessories. Do not change clothing. Output a single photorealistic image.\n"
+                "TASK: photo-realistic virtual haircut try-on.\n\n"
+                "INPUTS (in order):\n"
+                "  IMAGE 1 = the CUSTOMER (a real person). This is the ONLY person in the output.\n"
+                "  IMAGE 2 = a HAIRCUT REFERENCE. Use it ONLY as a visual template for hair/beard shape. "
+                "NEVER copy the face, skin tone, age, gender or identity from image 2. "
+                "If image 2 contains a person, IGNORE that person entirely.\n\n"
+                "OUTPUT REQUIREMENTS:\n"
+                "  - The output MUST be the SAME PERSON as image 1 (identical face, eyes, nose, mouth, jaw, skin, age).\n"
+                "  - Replace ONLY the hair and/or beard of image 1 to match the style shown in image 2 "
+                "(length, shape, fade, parting, texture, volume, sideburns, beard outline).\n"
+                "  - Keep image 1's expression, head pose, eye direction, lighting, camera angle, framing, clothing and background unchanged.\n"
+                "  - Do not add or remove accessories. Do not change clothing.\n"
+                "  - Photorealistic single output image.\n"
             )
             if custom_prompt:
                 instruction += f"\nAdditional notes from the barbershop: {custom_prompt}"
