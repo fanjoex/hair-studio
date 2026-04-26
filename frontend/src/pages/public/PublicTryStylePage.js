@@ -211,7 +211,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
               {/* Photo preview */}
               <div>
                 <Card className="overflow-hidden bg-surface border-border">
-                  <img src={photo} alt="Sua foto" className="w-full aspect-square object-cover" />
+                  <img src={photo} alt="Sua foto" className="w-full aspect-[3/4] object-contain bg-black" />
                   <div className="p-3 text-center text-sm text-zinc-400">Sua foto</div>
                 </Card>
               </div>
@@ -277,11 +277,11 @@ export default function PublicTryStylePage({ kioskMode = false }) {
             <h2 className="heading-2 text-gold text-center mb-6">Resultado: {result.style_name}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
               <Card className="overflow-hidden bg-surface border-border">
-                <img src={photo} alt="Original" className="w-full aspect-square object-cover" />
+                <img src={photo} alt="Original" className="w-full aspect-[3/4] object-contain bg-black" />
                 <div className="p-3 text-center text-sm text-zinc-400">Antes</div>
               </Card>
               <Card className="overflow-hidden bg-surface border-border">
-                <img src={`data:image/png;base64,${result.generated_image}`} alt="Resultado" className="w-full aspect-square object-cover" />
+                <img src={`data:image/png;base64,${result.generated_image}`} alt="Resultado" className="w-full aspect-[3/4] object-contain bg-black" />
                 <div className="p-3 text-center text-sm text-zinc-400">Depois — {result.style_name}</div>
               </Card>
             </div>
