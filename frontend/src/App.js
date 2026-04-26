@@ -1,14 +1,15 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "@/App.css";
 import axios from "axios";
-import { Upload, Scissors, Image as ImageIcon, History, Share2, Download, Heart, Globe, Star, X, ChevronLeft, ChevronRight, User, LogOut, LogIn } from "lucide-react";
+import { Upload, Scissors, Image as ImageIcon, Share2, Download, Heart, Globe, Star, ChevronLeft, ChevronRight, LogOut, LogIn, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { AuthDialog } from "@/components/AuthDialog";
+import { useNavigate } from "react-router-dom";
 
 // Get backend URL with proper fallback
 const getBackendUrl = () => {
@@ -39,17 +40,6 @@ console.log('API URL:', API);
 console.log('============================');
 
 axios.defaults.withCredentials = true;
-
-const AuthContext = createContext(null);
-
-const formatApiErrorDetail = (detail) => {
-  if (detail == null) return "Algo deu errado. Tente novamente.";
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail))
-    return detail.map((e) => (e && typeof e.msg === "string" ? e.msg : JSON.stringify(e))).filter(Boolean).join(" ");
-  if (detail && typeof detail.msg === "string") return detail.msg;
-  return String(detail);
-};
 
 function ErrorBoundary({ children }) {
   const [hasError, setHasError] = useState(false);
@@ -100,163 +90,6 @@ function ErrorBoundary({ children }) {
   }
 
   return children;
-}
-
-function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const { data } = await axios.get(`${API}/auth/me`);
-      setUser(data);
-    } catch (e) {
-      // 401 is expected when not logged in
-      if (e.response?.status === 401) {
-        setUser(false);
-      } else {
-        console.error('Auth check error:', e);
-        setUser(false);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email, password) => {
-    try {
-      const { data } = await axios.post(`${API}/auth/login`, { email, password });
-      setUser(data);
-      toast.success("Login realizado com sucesso!");
-      return true;
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-      return false;
-    }
-  };
-
-  const register = async (name, email, password) => {
-    try {
-      const { data } = await axios.post(`${API}/auth/register`, { name, email, password });
-      setUser(data);
-      toast.success("Conta criada com sucesso!");
-      return true;
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
-      return false;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await axios.post(`${API}/auth/logout`);
-      setUser(false);
-      toast.success("Logout realizado com sucesso!");
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-function useAuth() {
-  return useContext(AuthContext);
-}
-
-function AuthDialog({ open, onClose }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const { login, register } = useAuth();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const success = isLogin
-      ? await login(email, password)
-      : await register(name, email, password);
-    if (success) {
-      onClose();
-      setName("");
-      setEmail("");
-      setPassword("");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="bg-surface border-border">
-        <DialogHeader>
-          <DialogTitle className="heading-3">{isLogin ? "Entrar" : "Criar Conta"}</DialogTitle>
-          <DialogDescription className="body-text">
-            {isLogin ? "Entre para salvar seus resultados" : "Crie sua conta gratuitamente"}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div>
-              <Label htmlFor="name" className="text-zinc-300">Nome</Label>
-              <Input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required={!isLogin}
-                className="bg-background border-border text-white mt-2"
-                data-testid="auth-name-input"
-              />
-            </div>
-          )}
-          <div>
-            <Label htmlFor="email" className="text-zinc-300">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="bg-background border-border text-white mt-2"
-              data-testid="auth-email-input"
-            />
-          </div>
-          <div>
-            <Label htmlFor="password" className="text-zinc-300">Senha</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="bg-background border-border text-white mt-2"
-              data-testid="auth-password-input"
-            />
-          </div>
-          <Button type="submit" className="w-full" data-testid="auth-submit-button">
-            {isLogin ? "Entrar" : "Criar Conta"}
-          </Button>
-          <p className="text-center text-sm text-zinc-400">
-            {isLogin ? "Não tem conta? " : "Já tem conta? "}
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-primary hover:underline"
-            >
-              {isLogin ? "Criar agora" : "Entrar"}
-            </button>
-          </p>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function TutorialDialog({ open, onClose }) {
@@ -410,6 +243,7 @@ function PublicGallery({ open, onClose }) {
 
 function App() {
   const { user, loading, logout } = useAuth();
+  const navigate = useNavigate();
   const [uploadedPhoto, setUploadedPhoto] = useState(null);
   const [photoId, setPhotoId] = useState(null);
   const [styles, setStyles] = useState([]);
@@ -422,6 +256,23 @@ function App() {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Redirect admin/owner users to their panels
+  useEffect(() => {
+    if (!loading && user) {
+      if (user.role === "master_admin") {
+        navigate("/master", { replace: true });
+        return;
+      }
+      if (user.role === "barbershop_owner" || user.role === "barbershop_staff") {
+        navigate("/barbershop", { replace: true });
+        return;
+      }
+    }
+  }, [user, loading, navigate]);
 
   useEffect(() => {
     if (!loading) {
@@ -452,6 +303,76 @@ function App() {
       console.error("Error fetching history:", e);
     }
   };
+
+  const cameraInputRef = useRef(null);
+
+  const openCamera = useCallback(async () => {
+    // Try getUserMedia first (in-browser camera)
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+          audio: false,
+        });
+        streamRef.current = stream;
+        setShowCamera(true);
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        }, 100);
+        return;
+      }
+    } catch (e) {
+      console.warn("getUserMedia not available, using file input fallback");
+    }
+    // Fallback: open native file picker with camera option
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
+  }, []);
+
+  const closeCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
+  }, []);
+
+  const capturePhoto = useCallback(async () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    // Mirror for selfie
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoRef.current, 0, 0);
+    
+    closeCamera();
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const formData = new FormData();
+      formData.append("file", blob, "camera-photo.jpg");
+
+      try {
+        const response = await axios.post(`${API}/upload-photo`, formData);
+        setPhotoId(response.data.photo_id);
+        
+        const reader = new FileReader();
+        reader.onloadend = () => setUploadedPhoto(reader.result);
+        reader.readAsDataURL(blob);
+        
+        toast.success("Foto capturada com sucesso!");
+      } catch (e) {
+        console.error("Error uploading photo:", e);
+        toast.error("Erro ao enviar a foto");
+      }
+    }, "image/jpeg", 0.9);
+  }, [closeCamera]);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -607,19 +528,19 @@ function App() {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <header className="p-4 border-b border-border flex justify-between items-center">
-          <h1 className="heading-3">AI Hair & Beard Studio</h1>
+          <h1 className="heading-3 text-gold">AI Hair & Beard Studio</h1>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowGallery(true)} data-testid="open-gallery-button">
+            <Button className="btn-gold" size="sm" onClick={() => setShowGallery(true)} data-testid="open-gallery-button">
               <Globe className="w-4 h-4 mr-2" />
               Galeria
             </Button>
             {user ? (
-              <Button variant="outline" size="sm" onClick={logout} data-testid="logout-button">
+              <Button className="btn-gold" size="sm" onClick={logout} data-testid="logout-button">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sair
               </Button>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setShowAuthDialog(true)} data-testid="login-button">
+              <Button className="btn-gold" size="sm" onClick={() => setShowAuthDialog(true)} data-testid="login-button">
                 <LogIn className="w-4 h-4 mr-2" />
                 Entrar
               </Button>
@@ -630,35 +551,87 @@ function App() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-2xl w-full">
             <div className="text-center mb-8">
-              <h1 className="heading-1 mb-4">AI Hair & Beard Studio</h1>
+              <h1 className="heading-1 text-gold mb-4">AI Hair & Beard Studio</h1>
               <p className="body-text">Experimente diferentes cortes de cabelo e barba usando IA</p>
               {user && (
                 <p className="text-primary text-sm mt-2">Bem-vindo, {user.name}!</p>
               )}
             </div>
             
-            <label 
-              htmlFor="photo-upload" 
-              className="upload-zone"
-              data-testid="upload-photo-zone"
-            >
-              <Upload className="w-16 h-16 text-primary mb-4" />
-              <h3 className="heading-3 mb-2">Faça upload da sua foto</h3>
-              <p className="body-text">Arraste ou clique para selecionar</p>
-              <input 
-                id="photo-upload" 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                onChange={handleFileUpload}
-              />
-            </label>
+            <div className="upload-options">
+              <label 
+                htmlFor="photo-upload" 
+                className="upload-option"
+                data-testid="upload-photo-zone"
+              >
+                <Upload className="w-12 h-12" />
+                <h3 className="text-gold font-bold text-lg mb-1">Enviar Foto</h3>
+                <p className="text-sm text-zinc-400">Da galeria</p>
+                <input 
+                  id="photo-upload" 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleFileUpload}
+                />
+              </label>
+
+              <label 
+                htmlFor="camera-capture" 
+                className="upload-option"
+                data-testid="camera-capture-zone"
+                onClick={(e) => { e.preventDefault(); openCamera(); }}
+              >
+                <Camera className="w-12 h-12" />
+                <h3 className="text-gold font-bold text-lg mb-1">Tirar Foto</h3>
+                <p className="text-sm text-zinc-400">Usar câmera</p>
+                <input 
+                  ref={cameraInputRef}
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment"
+                  className="hidden" 
+                  onChange={handleFileUpload}
+                />
+              </label>
+            </div>
           </div>
         </div>
         
         <AuthDialog open={showAuthDialog} onClose={() => setShowAuthDialog(false)} />
         <TutorialDialog open={showTutorial} onClose={() => setShowTutorial(false)} />
         <PublicGallery open={showGallery} onClose={() => setShowGallery(false)} />
+
+        {/* Camera Modal */}
+        {showCamera && (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col" data-testid="camera-modal">
+            <div className="flex items-center justify-between p-4">
+              <h3 className="text-gold font-bold text-lg">Tirar Foto</h3>
+              <Button variant="ghost" size="sm" onClick={closeCamera} className="text-white" data-testid="close-camera-button">
+                Fechar
+              </Button>
+            </div>
+            <div className="flex-1 flex items-center justify-center overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="max-w-full max-h-full object-contain"
+                style={{ transform: "scaleX(-1)" }}
+              />
+            </div>
+            <div className="p-6 flex justify-center">
+              <button
+                onClick={capturePhoto}
+                className="w-20 h-20 rounded-full border-4 border-white bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center"
+                data-testid="capture-photo-button"
+              >
+                <div className="w-14 h-14 rounded-full bg-white"></div>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -666,19 +639,19 @@ function App() {
   return (
     <div className="min-h-screen bg-background">
       <header className="p-4 border-b border-border flex justify-between items-center">
-        <h1 className="heading-3">AI Hair & Beard Studio</h1>
+        <h1 className="heading-3 text-gold">AI Hair & Beard Studio</h1>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowGallery(true)} data-testid="open-gallery-button">
+          <Button className="btn-gold" size="sm" onClick={() => setShowGallery(true)} data-testid="open-gallery-button">
             <Globe className="w-4 h-4 mr-2" />
             Galeria
           </Button>
           {user ? (
-            <Button variant="outline" size="sm" onClick={logout}>
+            <Button className="btn-gold" size="sm" onClick={logout}>
               <LogOut className="w-4 h-4 mr-2" />
               Sair
             </Button>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setShowAuthDialog(true)}>
+            <Button className="btn-gold" size="sm" onClick={() => setShowAuthDialog(true)}>
               <LogIn className="w-4 h-4 mr-2" />
               Entrar
             </Button>
@@ -689,7 +662,7 @@ function App() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 lg:gap-8 min-h-[calc(100vh-73px)]">
         <div className="lg:col-span-8 flex flex-col p-6 lg:p-8">
           <div className="mb-6">
-            <h2 className="heading-2 mb-2">Transforme Seu Visual</h2>
+            <h2 className="heading-2 text-gold mb-2">Transforme Seu Visual</h2>
             <p className="body-text">Selecione um estilo e veja o resultado instantaneamente</p>
           </div>
 
@@ -931,10 +904,11 @@ function App() {
           <Button 
             onClick={handleGenerate}
             disabled={!selectedStyle || isGenerating}
-            className="w-full mt-6"
+            className="btn-gold w-full mt-6 text-lg"
             size="lg"
             data-testid="generate-ai-button"
           >
+            <Scissors className="w-5 h-5 mr-2" />
             {isGenerating ? "Gerando..." : "Gerar com IA"}
           </Button>
 
@@ -959,14 +933,5 @@ function App() {
   );
 }
 
-function AppWithAuth() {
-  return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </ErrorBoundary>
-  );
-}
-
-export default AppWithAuth;
+// Export App diretamente (AuthProvider agora está em Routes.js)
+export default App;

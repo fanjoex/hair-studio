@@ -157,3 +157,95 @@ h1, h2, h3, h4, h5, h6 {
 .style-item:hover img {
   transform: scale(1.05);
 }
+
+/* Gold Metallic Button Style */
+.btn-gold {
+  background: linear-gradient(135deg, #b8860b 0%, #ffd700 25%, #f4e29a 50%, #ffd700 75%, #b8860b 100%);
+  background-size: 200% 200%;
+  color: #1a1a1a !important;
+  font-weight: 700;
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  animation: goldShimmer 3s ease infinite;
+}
+
+.btn-gold:hover {
+  background-size: 200% 200%;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.4), 0 0 40px rgba(255, 215, 0, 0.1);
+  border-color: rgba(255, 215, 0, 0.7);
+}
+
+.btn-gold svg {
+  color: #1a1a1a !important;
+}
+
+@keyframes goldShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Fix button contrast for dark theme - specific variants only */
+button[data-variant="secondary"],
+button[data-variant="outline"],
+button[data-variant="ghost"],
+.btn-secondary,
+.btn-outline,
+.btn-ghost {
+  color: #fafafa !important;
+}
+
+button[data-variant="outline"],
+.btn-outline {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+button[data-variant="secondary"],
+.btn-secondary {
+  background-color: #27272a !important;
+}
+
+/* Gold Text Style */
+.text-gold {
+  background: linear-gradient(135deg, #b8860b, #ffd700, #f4e29a, #ffd700, #b8860b);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: goldShimmer 3s ease infinite;
+}
+
+/* Upload Options Grid */
+.upload-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.upload-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  border: 2px dashed rgba(255, 215, 0, 0.3);
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 215, 0, 0.02);
+}
+
+.upload-option:hover {
+  border-color: rgba(255, 215, 0, 0.6);
+  background: rgba(255, 215, 0, 0.05);
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.upload-option svg {
+  color: #ffd700;
+  margin-bottom: 0.75rem;
+}

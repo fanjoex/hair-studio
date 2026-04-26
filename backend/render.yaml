@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: hair-beard-studio-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: MONGO_URL
+        sync: false        # set in Render dashboard (secret)
+      - key: DB_NAME
+        value: hair_beard_studio
+      - key: JWT_SECRET
+        generateValue: true   # Render gera um secret aleatorio
+      - key: EMERGENT_LLM_KEY
+        sync: false        # Gemini API key - set in dashboard
+      - key: CORS_ORIGINS
+        sync: false        # ex: https://seu-app.vercel.app
+      - key: ADMIN_EMAIL
+        value: admin@example.com
+      - key: ADMIN_PASSWORD
+        sync: false
+    healthCheckPath: /api/health
+    autoDeploy: true

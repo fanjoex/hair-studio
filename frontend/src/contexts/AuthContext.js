@@ -76,8 +76,33 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    try {
+      const { data } = await axios.post(`${API}/auth/password-reset/request`, { email });
+      return data;
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+      return null;
+    }
+  }, []);
+
+  const confirmPasswordReset = useCallback(async (email, code, newPassword) => {
+    try {
+      await axios.post(`${API}/auth/password-reset/confirm`, {
+        email,
+        code,
+        new_password: newPassword,
+      });
+      toast.success("Senha alterada com sucesso!");
+      return true;
+    } catch (e) {
+      toast.error(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+      return false;
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, checkAuth, requestPasswordReset, confirmPasswordReset }}>
       {children}
     </AuthContext.Provider>
   );

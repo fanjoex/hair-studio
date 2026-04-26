@@ -15,7 +15,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import base64
 import asyncio
-from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from google import genai
+from google.genai import types
 import bcrypt
 import jwt
 import secrets
@@ -50,6 +51,21 @@ def create_refresh_token(user_id: str) -> str:
     payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
+def get_cookie_settings() -> dict:
+    """Return cookie settings adapted to environment.
+    In production (cross-site between Vercel frontend and Render backend),
+    we need Secure=True and SameSite=None.
+    """
+    is_prod = os.environ.get("ENVIRONMENT", "development").lower() == "production"
+    if is_prod:
+        return {"httponly": True, "secure": True, "samesite": "none", "path": "/"}
+    return {"httponly": True, "secure": False, "samesite": "lax", "path": "/"}
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    cookie_kwargs = get_cookie_settings()
+    response.set_cookie(key="access_token", value=access_token, max_age=900, **cookie_kwargs)
+    response.set_cookie(key="refresh_token", value=refresh_token, max_age=604800, **cookie_kwargs)
+
 async def get_current_user(request: Request) -> dict:
     token = request.cookies.get("access_token")
     if not token:
@@ -82,6 +98,14 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
 
 class UserResponse(BaseModel):
     id: str
@@ -143,8 +167,7 @@ async def register(user_data: UserRegister, response: Response):
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    set_auth_cookies(response, access_token, refresh_token)
     
     return UserResponse(id=user_id, name=user_data.name, email=email, role="user", favorites=[])
 
@@ -160,8 +183,7 @@ async def login(credentials: UserLogin, response: Response, request: Request):
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    set_auth_cookies(response, access_token, refresh_token)
     
     return UserResponse(
         id=user_id,
@@ -187,6 +209,70 @@ async def logout(response: Response):
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
+
+
+@api_router.get("/health")
+async def health_check():
+    """Public healthcheck endpoint (used by Render)."""
+    try:
+        await db.command("ping")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {"status": "ok", "db": db_ok, "env": os.environ.get("ENVIRONMENT", "development")}
+
+
+@api_router.post("/auth/password-reset/request")
+async def request_password_reset(data: PasswordResetRequest):
+    email = data.email.lower()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        # Return success even if not found (security: don't reveal if email exists)
+        return {"message": "Se o email existir, um código de recuperação será gerado."}
+
+    import random
+    code = str(random.randint(100000, 999999))
+    expires = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    await db.password_resets.delete_many({"email": email})
+    await db.password_resets.insert_one({
+        "email": email,
+        "code": code,
+        "expires_at": expires,
+        "used": False,
+    })
+
+    logging.info(f"Password reset code for {email}: {code}")
+
+    return {"message": "Se o email existir, um código de recuperação será gerado.", "code": code}
+
+
+@api_router.post("/auth/password-reset/confirm")
+async def confirm_password_reset(data: PasswordResetConfirm):
+    email = data.email.lower()
+    reset = await db.password_resets.find_one({
+        "email": email,
+        "code": data.code,
+        "used": False,
+    })
+
+    if not reset:
+        raise HTTPException(status_code=400, detail="Código inválido ou expirado.")
+
+    if reset.get("expires_at") and reset["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Código expirado. Solicite um novo.")
+
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 6 caracteres.")
+
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+
+    await db.password_resets.update_one({"_id": reset["_id"]}, {"$set": {"used": True}})
+
+    return {"message": "Senha alterada com sucesso!"}
 
 from styles_data import StyleOption, get_all_styles
 
@@ -219,7 +305,27 @@ async def seed_admin():
 
 @app.on_event("startup")
 async def startup_event():
+    # Indexes for performance
     await db.users.create_index("email", unique=True)
+    await db.barbershops.create_index("id", unique=True)
+    await db.barbershops.create_index("owner_id")
+    await db.clients.create_index("barbershop_id")
+    await db.clients.create_index("id", unique=True)
+    await db.services.create_index("barbershop_id")
+    await db.services.create_index("id", unique=True)
+    await db.professionals.create_index("barbershop_id")
+    await db.professionals.create_index("id", unique=True)
+    await db.appointments.create_index([("barbershop_id", 1), ("date", 1)])
+    await db.appointments.create_index([("professional_id", 1), ("date", 1)])
+    await db.appointments.create_index("id", unique=True)
+    await db.photos.create_index("id", unique=True)
+    await db.results.create_index("id")
+    await db.styles.create_index("id", unique=True)
+    await db.styles.create_index("barbershop_id")
+    await db.barbershop_styles.create_index("barbershop_id")
+    await db.barbershop_styles.create_index("id", unique=True)
+    await db.working_hours.create_index("barbershop_id", unique=True)
+    await db.password_resets.create_index("email")
     await init_styles()
     await seed_admin()
 
@@ -295,21 +401,24 @@ async def generate_style(request_data: GenerateRequest, request: Request):
             raise HTTPException(status_code=404, detail="Style not found")
         
         api_key = os.getenv("EMERGENT_LLM_KEY")
-        session_id = f"session-{uuid.uuid4()}"
-        chat = LlmChat(api_key=api_key, session_id=session_id, system_message="You are a professional hair and beard styling AI assistant.")
-        chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
-        
-        msg = UserMessage(
-            text=style["prompt_template"],
-            file_contents=[ImageContent(photo["image_data"])]
+        gen_client = genai.Client(api_key=api_key)
+        image_bytes = base64.b64decode(photo["image_data"])
+        response = await asyncio.to_thread(
+            gen_client.models.generate_content,
+            model="gemini-2.5-flash-image",
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                types.Part.from_text(text=style["prompt_template"])
+            ],
+            config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"])
         )
-        
-        text, images = await chat.send_message_multimodal_response(msg)
-        
-        if not images or len(images) == 0:
+        generated_image = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                generated_image = base64.b64encode(part.inline_data.data).decode("utf-8")
+                break
+        if not generated_image:
             raise HTTPException(status_code=500, detail="Failed to generate image")
-        
-        generated_image = images[0]['data']
         
         result = GeneratedResult(
             user_id=user["_id"] if user else None,
@@ -409,10 +518,31 @@ async def get_result(result_id: str):
 
 app.include_router(api_router)
 
+# Incluir rotas de barbershop
+from barbershop_routes import barbershop_router, set_db
+set_db(db)  # Injetar database instance
+app.include_router(barbershop_router)
+
+# Incluir rotas de agendamento
+from scheduling_routes import scheduling_router, set_scheduling_db
+set_scheduling_db(db)
+app.include_router(scheduling_router)
+
+# Incluir rotas de estilos por barbearia
+from barbershop_styles_routes import styles_router, set_styles_db
+set_styles_db(db)
+app.include_router(styles_router)
+
+# Incluir rotas do painel do cliente
+from client_routes import client_router, set_client_db
+set_client_db(db)
+app.include_router(client_router)
+
+cors_origins = os.environ.get('CORS_ORIGINS', '*')
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[os.environ.get('FRONTEND_URL', 'https://virtual-barber-8.preview.emergentagent.com')],
+    allow_origins=cors_origins.split(',') if cors_origins != '*' else ['*'],
     allow_methods=["*"],
     allow_headers=["*"],
 )
