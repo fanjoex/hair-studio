@@ -5,6 +5,50 @@ const API = `${BACKEND_URL}/api`;
 
 axios.defaults.withCredentials = true;
 
+// --- Auto-refresh on 401 ---------------------------------------------------
+// On any 401 response, try POST /auth/refresh once and replay the original
+// request. Avoids forcing the user to re-login when access_token expires.
+let _refreshPromise = null;
+
+const _isAuthEndpoint = (url = "") =>
+  url.includes("/auth/refresh") ||
+  url.includes("/auth/login") ||
+  url.includes("/auth/register") ||
+  url.includes("/auth/logout");
+
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const original = error.config || {};
+    const status = error.response && error.response.status;
+
+    if (
+      status === 401 &&
+      !original._retry &&
+      !_isAuthEndpoint(original.url || "")
+    ) {
+      original._retry = true;
+      try {
+        if (!_refreshPromise) {
+          _refreshPromise = axios
+            .post(`${API}/auth/refresh`)
+            .finally(() => {
+              _refreshPromise = null;
+            });
+        }
+        await _refreshPromise;
+        return axios(original);
+      } catch (refreshErr) {
+        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshErr);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 /**
  * Service para operações do painel master.
  */

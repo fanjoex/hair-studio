@@ -210,6 +210,29 @@ async def logout(response: Response):
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
 
+@api_router.post("/auth/refresh")
+async def refresh_access_token(request: Request, response: Response):
+    """Issue a new access_token (and rotate refresh_token) using a valid refresh cookie."""
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user_id = str(user["_id"])
+        new_access = create_access_token(user_id, user["email"])
+        new_refresh = create_refresh_token(user_id)
+        set_auth_cookies(response, new_access, new_refresh)
+        return {"message": "refreshed"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
 
 @api_router.get("/health")
 async def health_check():
