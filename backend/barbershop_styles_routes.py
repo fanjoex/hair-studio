@@ -420,14 +420,68 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             b64 = b64.split(",", 1)[1]
         image_bytes = base64.b64decode(b64)
 
+        # ----- Build a multimodal request that ALSO passes the style reference image -----
+        # If the style has a reference image saved by the barbershop, include it so the AI
+        # copies the actual haircut/beard from the reference instead of improvising from text.
+        style_image_part = None
+        style_mime = "image/jpeg"
+        style_image_url = style.get("image_url")
+        if style_image_url and isinstance(style_image_url, str):
+            try:
+                if style_image_url.startswith("data:"):
+                    header, b64data = style_image_url.split(",", 1)
+                    if ";" in header and ":" in header:
+                        style_mime = header.split(":", 1)[1].split(";", 1)[0] or "image/jpeg"
+                else:
+                    b64data = style_image_url
+                style_bytes = base64.b64decode(b64data)
+                style_image_part = types.Part.from_bytes(data=style_bytes, mime_type=style_mime)
+            except Exception as ref_err:
+                logging.warning(f"Could not load style reference image: {ref_err}")
+                style_image_part = None
+
+        custom_prompt = (style.get("prompt_template") or "").strip()
+        # Strong instruction so Gemini stays faithful to the reference image
+        if style_image_part is not None:
+            instruction = (
+                "You will receive TWO images:\n"
+                "  1) A photo of a real person (the customer).\n"
+                "  2) A reference image showing the EXACT haircut/beard style to apply.\n\n"
+                "Generate a NEW photo of the SAME person from image 1, but with the haircut "
+                "and/or beard EXACTLY as shown in image 2. Be faithful to the reference: "
+                "match length, shape, fade/taper, parting, texture, volume, sideburns and beard outline.\n"
+                "STRICTLY PRESERVE from image 1: face identity, facial features, skin tone, "
+                "expression, eye direction, head pose, lighting, camera angle, framing and background.\n"
+                "Do not add or remove accessories. Do not change clothing. Output a single photorealistic image.\n"
+            )
+            if custom_prompt:
+                instruction += f"\nAdditional notes from the barbershop: {custom_prompt}"
+            contents = [
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                style_image_part,
+                types.Part.from_text(text=instruction),
+            ]
+        else:
+            # Fallback: no reference image available
+            instruction = (
+                "Generate a photorealistic edited version of the input photo applying the "
+                "following haircut/beard style. STRICTLY PRESERVE the person's face identity, "
+                "expression, skin tone, head pose, lighting and background.\n\n"
+                f"Style: {custom_prompt or 'modern men haircut'}"
+            )
+            contents = [
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                types.Part.from_text(text=instruction),
+            ]
+
         response = await asyncio.to_thread(
             gen_client.models.generate_content,
             model="gemini-2.5-flash-image",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_text(text=style["prompt_template"])
-            ],
-            config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"])
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+                temperature=0.2,
+            ),
         )
 
         generated_image = None
