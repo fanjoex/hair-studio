@@ -447,25 +447,18 @@ async def generate_style(request_data: GenerateRequest, request: Request):
         custom_prompt = (style.get("prompt_template") or "").strip()
         if style_image_part is not None:
             instruction = (
-                "TASK: photo-realistic virtual haircut try-on.\n\n"
-                "INPUTS (in order):\n"
-                "  IMAGE 1 = the CUSTOMER (a real person). This is the ONLY person in the output.\n"
-                "  IMAGE 2 = a HAIRCUT REFERENCE. Use it ONLY as a visual template for hair/beard shape. "
-                "NEVER copy the face, skin tone, age, gender or identity from image 2. "
-                "If image 2 contains a person, IGNORE that person entirely.\n\n"
-                "OUTPUT REQUIREMENTS:\n"
-                "  - The output MUST be the SAME PERSON as image 1 (identical face, eyes, nose, mouth, jaw, skin, age).\n"
-                "  - Replace ONLY the hair and/or beard of image 1 to match the style shown in image 2 "
-                "(length, shape, fade, parting, texture, volume, sideburns, beard outline).\n"
-                "  - Keep image 1's expression, head pose, eye direction, lighting, camera angle, framing, clothing and background unchanged.\n"
-                "  - Do not add or remove accessories. Do not change clothing.\n"
-                "  - Photorealistic single output image.\n"
+                "You are a virtual try-on hairstyle editor. The output MUST look like a photo of the SAME PERSON shown in the customer photo, only with a different haircut/beard.\n\n"
+                "PRIMARY RULE (most important): preserve the customer's identity exactly. Keep the same face shape, jawline, cheekbones, nose, eyes, eyebrows, mouth, ears, skin tone, age, and gender. Do not slim, widen, age or rejuvenate the face. Do not change the face in any way.\n\n"
+                "SECONDARY RULE: change ONLY the hair on top of the head and the beard, copying the shape, length, fade, parting, texture and volume from the hairstyle reference image. The reference image is just a visual guide for the hair; ignore everything else in it (face, body, background, lighting).\n\n"
+                "ALSO PRESERVE FROM THE CUSTOMER PHOTO: expression, head pose, eye direction, lighting, camera angle, framing, clothing and background. Do not add or remove accessories. Output a single photorealistic image.\n"
             )
             if custom_prompt:
-                instruction += f"\nAdditional notes: {custom_prompt}"
+                instruction += f"\nAdditional notes: {custom_prompt}\n"
             contents = [
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                types.Part.from_text(text="Hairstyle reference (use only for hair/beard shape):"),
                 style_image_part,
+                types.Part.from_text(text="Customer photo (this is the person; preserve identity exactly):"),
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
                 types.Part.from_text(text=instruction),
             ]
         else:
