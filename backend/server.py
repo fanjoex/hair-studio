@@ -608,11 +608,25 @@ from client_routes import client_router, set_client_db
 set_client_db(db)
 app.include_router(client_router)
 
-cors_origins = os.environ.get('CORS_ORIGINS', '*')
+# CORS: list of allowed origins. We must NEVER use "*" together with
+# allow_credentials=True (browsers reject it), so we always send a specific list.
+# Override via CORS_ORIGINS env var (comma-separated). The defaults cover the
+# production Vercel domain plus localhost for dev.
+_default_cors = ",".join([
+    "https://hair-studio-eml.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+])
+cors_origins_env = os.environ.get('CORS_ORIGINS', _default_cors)
+cors_origins_list = [o.strip().rstrip('/') for o in cors_origins_env.split(',') if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=cors_origins.split(',') if cors_origins != '*' else ['*'],
+    allow_origins=cors_origins_list,
+    # Allow any vercel preview URL automatically
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
