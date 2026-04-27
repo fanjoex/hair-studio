@@ -400,6 +400,64 @@ async def get_style_image(style_id: str):
 
 DEFAULT_HAIRCUT_DESCRIPTION = "modern men's haircut, neat and clean"
 
+# Simple in-memory cache so we don't re-translate the same prompt every request
+_HAIRCUT_PROMPT_CACHE: dict = {}
+
+
+async def _translate_haircut_prompt(pt_text: str) -> str:
+    """Translate / expand a Portuguese haircut description into a detailed English
+    prompt for FLUX Kontext. Uses Gemini (already configured). Falls back to the
+    raw text on any error.
+    """
+    pt_text = (pt_text or "").strip()
+    if not pt_text:
+        return DEFAULT_HAIRCUT_DESCRIPTION
+    if pt_text in _HAIRCUT_PROMPT_CACHE:
+        return _HAIRCUT_PROMPT_CACHE[pt_text]
+
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        return pt_text  # no translator available, send as-is
+
+    try:
+        client = genai.Client(api_key=api_key)
+        instruction = (
+            "Translate the following Brazilian Portuguese description of a men's haircut "
+            "and/or beard into a SHORT, DETAILED ENGLISH prompt suitable for an image-editing "
+            "AI (FLUX Kontext). Output ONLY the English prompt as a single line, no quotes, "
+            "no preface, no explanations. Be specific about length, fade, parting, texture, "
+            "volume, sideburns and beard if mentioned.\n\n"
+            f"Portuguese: {pt_text}\n\n"
+            "English prompt:"
+        )
+
+        def _run():
+            return client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[types.Part.from_text(text=instruction)],
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+
+        response = await asyncio.to_thread(_run)
+        text_out = ""
+        try:
+            text_out = (response.text or "").strip()
+        except Exception:
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "text", None):
+                    text_out += part.text
+            text_out = text_out.strip()
+
+        # Single line, drop surrounding quotes
+        text_out = text_out.splitlines()[0].strip().strip('"').strip("'")
+        if not text_out:
+            return pt_text
+        _HAIRCUT_PROMPT_CACHE[pt_text] = text_out
+        return text_out
+    except Exception as e:
+        logging.warning(f"Failed to translate haircut prompt: {e}")
+        return pt_text
+
 
 async def _generate_with_replicate(image_bytes: bytes, haircut_text: str) -> Optional[str]:
     """Generate using Replicate's flux-kontext-apps/change-haircut.
@@ -569,11 +627,13 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         image_bytes = base64.b64decode(b64)
 
         custom_prompt = (style.get("prompt_template") or "").strip()
+        # Auto-translate Portuguese -> detailed English for FLUX Kontext
+        replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
         try:
-            generated_image = await _generate_with_replicate(image_bytes, custom_prompt)
+            generated_image = await _generate_with_replicate(image_bytes, replicate_prompt)
         except Exception as rep_err:
             logging.warning(f"Replicate generation failed, falling back to Gemini: {rep_err}")
             generated_image = None
