@@ -17,6 +17,13 @@ from google import genai
 from google.genai import types
 import asyncio
 
+try:
+    import replicate as replicate_lib
+except ImportError:
+    replicate_lib = None
+
+import requests as _http_requests
+
 styles_router = APIRouter(prefix="/api")
 db = None
 
@@ -387,6 +394,152 @@ async def get_style_image(style_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# AI generation helpers (Replicate primary, Gemini fallback)
+# ============================================================================
+
+DEFAULT_HAIRCUT_DESCRIPTION = "modern men's haircut, neat and clean"
+
+
+async def _generate_with_replicate(image_bytes: bytes, haircut_text: str) -> Optional[str]:
+    """Generate using Replicate's flux-kontext-apps/change-haircut.
+
+    Returns base64 of the generated image, or None if Replicate is not configured.
+    Raises on failure (so the caller can fall back to Gemini).
+    """
+    if replicate_lib is None:
+        return None
+    token = os.getenv("REPLICATE_API_TOKEN")
+    if not token:
+        return None
+
+    haircut = (haircut_text or "").strip() or DEFAULT_HAIRCUT_DESCRIPTION
+
+    # Build a data URI that Replicate accepts as input
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+
+    def _run():
+        client = replicate_lib.Client(api_token=token)
+        # Replicate returns a FileOutput / URL / list depending on the model
+        return client.run(
+            "flux-kontext-apps/change-haircut",
+            input={
+                "input_image": data_uri,
+                "haircut": haircut,
+                "aspect_ratio": "match_input_image",
+                "output_format": "jpg",
+                "safety_tolerance": 2,
+            },
+        )
+
+    output = await asyncio.to_thread(_run)
+
+    # Normalize output to bytes. Replicate may return:
+    #  - str URL
+    #  - FileOutput with .url()/.url and/or .read()
+    #  - list of any of the above
+    if isinstance(output, list) and output:
+        output = output[0]
+
+    image_bytes_out = None
+    image_url = None
+
+    if isinstance(output, str):
+        image_url = output
+    else:
+        # Try .read() first (preferred, no extra HTTP request)
+        if hasattr(output, "read"):
+            try:
+                image_bytes_out = output.read()
+            except Exception:
+                image_bytes_out = None
+        # Fallback to URL
+        if image_bytes_out is None and hasattr(output, "url"):
+            try:
+                image_url = output.url() if callable(output.url) else output.url
+            except Exception:
+                image_url = None
+
+    if image_bytes_out is None and image_url:
+        def _download():
+            r = _http_requests.get(image_url, timeout=60)
+            r.raise_for_status()
+            return r.content
+        image_bytes_out = await asyncio.to_thread(_download)
+
+    if not image_bytes_out:
+        raise RuntimeError("Replicate returned no image data")
+
+    return base64.b64encode(image_bytes_out).decode("utf-8")
+
+
+async def _generate_with_gemini(image_bytes: bytes, style: dict, custom_prompt: str) -> str:
+    """Fallback generator using Gemini 2.5 Flash Image."""
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    gen_client = genai.Client(api_key=api_key)
+
+    # Optional: include reference image of the style if available
+    style_image_part = None
+    style_mime = "image/jpeg"
+    style_image_url = style.get("image_url")
+    if style_image_url and isinstance(style_image_url, str):
+        try:
+            if style_image_url.startswith("data:"):
+                header, b64data = style_image_url.split(",", 1)
+                if ";" in header and ":" in header:
+                    style_mime = header.split(":", 1)[1].split(";", 1)[0] or "image/jpeg"
+            else:
+                b64data = style_image_url
+            style_bytes = base64.b64decode(b64data)
+            style_image_part = types.Part.from_bytes(data=style_bytes, mime_type=style_mime)
+        except Exception as ref_err:
+            logging.warning(f"Could not load style reference image: {ref_err}")
+            style_image_part = None
+
+    if style_image_part is not None:
+        instruction = (
+            "You are a virtual try-on hairstyle editor. The output MUST look like a photo of the SAME PERSON shown in the customer photo, only with a different haircut/beard.\n\n"
+            "PRIMARY RULE: preserve the customer's identity exactly. Keep the same face shape, jawline, cheekbones, nose, eyes, eyebrows, mouth, ears, skin tone, age, and gender. Do not change the face in any way.\n\n"
+            "SECONDARY RULE: change ONLY the hair and the beard, copying the shape from the hairstyle reference image. The reference image is just a visual guide for the hair; ignore everything else in it.\n\n"
+            "ALSO PRESERVE FROM THE CUSTOMER PHOTO: expression, head pose, lighting, camera angle, framing, clothing and background. Output a single photorealistic image.\n"
+        )
+        if custom_prompt:
+            instruction += f"\nAdditional notes: {custom_prompt}\n"
+        contents = [
+            types.Part.from_text(text="Hairstyle reference (use only for hair/beard shape):"),
+            style_image_part,
+            types.Part.from_text(text="Customer photo (preserve identity exactly):"),
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            types.Part.from_text(text=instruction),
+        ]
+    else:
+        instruction = (
+            "Edit the input photo applying the following haircut/beard style. "
+            "STRICTLY preserve face identity, expression, skin tone, head pose, lighting and background.\n\n"
+            f"Style: {custom_prompt or DEFAULT_HAIRCUT_DESCRIPTION}"
+        )
+        contents = [
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            types.Part.from_text(text=instruction),
+        ]
+
+    response = await asyncio.to_thread(
+        gen_client.models.generate_content,
+        model="gemini-2.5-flash-image",
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE", "TEXT"],
+            temperature=0.2,
+        ),
+    )
+    for part in response.candidates[0].content.parts:
+        if part.inline_data is not None:
+            return base64.b64encode(part.inline_data.data).decode("utf-8")
+    raise RuntimeError("Gemini returned no image")
+
+
 @styles_router.post("/public/barbershop/{barbershop_id}/try-style")
 async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, request: Request):
     """Public AI style generation for barbershop clients. Saves to history if logged in as client."""
@@ -409,85 +562,32 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         if not style:
             raise HTTPException(status_code=404, detail="Style not found")
 
-        api_key = os.getenv("EMERGENT_LLM_KEY")
-        if not api_key:
-            raise HTTPException(status_code=500, detail="AI service not configured")
-
-        gen_client = genai.Client(api_key=api_key)
         # photo_base64 may include data URI prefix; strip if present
         b64 = data.photo_base64
         if "," in b64 and b64.startswith("data:"):
             b64 = b64.split(",", 1)[1]
         image_bytes = base64.b64decode(b64)
 
-        # ----- Build a multimodal request that ALSO passes the style reference image -----
-        # If the style has a reference image saved by the barbershop, include it so the AI
-        # copies the actual haircut/beard from the reference instead of improvising from text.
-        style_image_part = None
-        style_mime = "image/jpeg"
-        style_image_url = style.get("image_url")
-        if style_image_url and isinstance(style_image_url, str):
-            try:
-                if style_image_url.startswith("data:"):
-                    header, b64data = style_image_url.split(",", 1)
-                    if ";" in header and ":" in header:
-                        style_mime = header.split(":", 1)[1].split(";", 1)[0] or "image/jpeg"
-                else:
-                    b64data = style_image_url
-                style_bytes = base64.b64decode(b64data)
-                style_image_part = types.Part.from_bytes(data=style_bytes, mime_type=style_mime)
-            except Exception as ref_err:
-                logging.warning(f"Could not load style reference image: {ref_err}")
-                style_image_part = None
-
         custom_prompt = (style.get("prompt_template") or "").strip()
-        # Strong instruction so Gemini stays faithful to the reference image
-        if style_image_part is not None:
-            instruction = (
-                "You are a virtual try-on hairstyle editor. The output MUST look like a photo of the SAME PERSON shown in the customer photo, only with a different haircut/beard.\n\n"
-                "PRIMARY RULE (most important): preserve the customer's identity exactly. Keep the same face shape, jawline, cheekbones, nose, eyes, eyebrows, mouth, ears, skin tone, age, and gender. Do not slim, widen, age or rejuvenate the face. Do not change the face in any way.\n\n"
-                "SECONDARY RULE: change ONLY the hair on top of the head and the beard, copying the shape, length, fade, parting, texture and volume from the hairstyle reference image. The reference image is just a visual guide for the hair; ignore everything else in it (face, body, background, lighting).\n\n"
-                "ALSO PRESERVE FROM THE CUSTOMER PHOTO: expression, head pose, eye direction, lighting, camera angle, framing, clothing and background. Do not add or remove accessories. Output a single photorealistic image.\n"
-            )
-            if custom_prompt:
-                instruction += f"\nAdditional barbershop notes: {custom_prompt}\n"
-            # Order matters for Gemini: put the hairstyle reference first (as a visual guide),
-            # then the customer photo last (so it stays as the dominant anchor for identity).
-            contents = [
-                types.Part.from_text(text="Hairstyle reference (use only for hair/beard shape):"),
-                style_image_part,
-                types.Part.from_text(text="Customer photo (this is the person; preserve identity exactly):"),
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_text(text=instruction),
-            ]
-        else:
-            # Fallback: no reference image available
-            instruction = (
-                "Generate a photorealistic edited version of the input photo applying the "
-                "following haircut/beard style. STRICTLY PRESERVE the person's face identity, "
-                "expression, skin tone, head pose, lighting and background.\n\n"
-                f"Style: {custom_prompt or 'modern men haircut'}"
-            )
-            contents = [
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_text(text=instruction),
-            ]
 
-        response = await asyncio.to_thread(
-            gen_client.models.generate_content,
-            model="gemini-2.5-flash-image",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                temperature=0.2,
-            ),
-        )
-
+        # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                generated_image = base64.b64encode(part.inline_data.data).decode("utf-8")
-                break
+        try:
+            generated_image = await _generate_with_replicate(image_bytes, custom_prompt)
+        except Exception as rep_err:
+            logging.warning(f"Replicate generation failed, falling back to Gemini: {rep_err}")
+            generated_image = None
+
+        # ===== Fallback: Gemini =====
+        if not generated_image:
+            try:
+                generated_image = await _generate_with_gemini(image_bytes, style, custom_prompt)
+            except HTTPException:
+                raise
+            except Exception as gem_err:
+                logging.error(f"Gemini fallback failed: {gem_err}")
+                raise HTTPException(status_code=500, detail="Failed to generate image")
+
         if not generated_image:
             raise HTTPException(status_code=500, detail="Failed to generate image")
 
