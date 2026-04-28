@@ -657,7 +657,7 @@ async def _generate_with_replicate(image_bytes: bytes, haircut_text: str) -> Opt
                 "haircut": haircut,
                 "aspect_ratio": "match_input_image",
                 "output_format": "jpg",
-                "safety_tolerance": 2,
+                "safety_tolerance": 5,
             },
         )
 
@@ -760,7 +760,7 @@ async def _generate_with_gemini(image_bytes: bytes, style: dict, custom_prompt: 
         contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
-            temperature=0.2,
+            temperature=1.0,
         ),
     )
     for part in response.candidates[0].content.parts:
@@ -799,10 +799,19 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
 
         # Auto-describe from reference image if no prompt is saved yet (one-time per style)
         custom_prompt = await _ensure_style_prompt(style)
-        # Auto-translate Portuguese -> detailed English for FLUX Kontext (also cleans up
-        # English prompts). For freshly auto-described prompts (already English) this is
-        # essentially a pass-through after the in-memory cache is warm.
-        replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
+        # Only run translation when the prompt might be Portuguese.
+        # If it looks like clean English (auto-describe output) skip re-translation.
+        def _looks_english(text: str) -> bool:
+            """Rough heuristic: if >70% of words are ASCII-only it's probably English."""
+            if not text:
+                return False
+            words = text.split()
+            ascii_words = sum(1 for w in words if w.isascii())
+            return ascii_words / len(words) >= 0.7
+        if custom_prompt and _looks_english(custom_prompt):
+            replicate_prompt = custom_prompt  # already good English, use as-is
+        else:
+            replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
