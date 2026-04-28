@@ -265,11 +265,10 @@ export function StylesPage() {
               <Label className="text-zinc-300">Descrição</Label>
               <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="mt-1 bg-background border-border text-white" placeholder="Descrição breve do estilo..." data-testid="style-description-input" />
             </div>
-            <div className="rounded-md bg-zinc-900/50 border border-zinc-800 p-3">
-              <p className="text-xs text-zinc-400">
-                ✨ <span className="text-zinc-300 font-medium">A IA descreve o corte automaticamente</span> a partir da foto de referência que você subir.
-                Você não precisa escrever nada.
-              </p>
+            <div>
+              <Label className="text-zinc-300">Prompt da IA (opcional)</Label>
+              <Input value={formData.prompt_template} onChange={(e) => setFormData({ ...formData, prompt_template: e.target.value })} className="mt-1 bg-background border-border text-white" placeholder="Se vazio, será gerado automaticamente" data-testid="style-prompt-input" />
+              <p className="text-xs text-zinc-500 mt-1">Instrução para a IA transformar a foto do cliente</p>
             </div>
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
