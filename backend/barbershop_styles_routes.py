@@ -241,7 +241,24 @@ async def upload_style_image(style_id: str, file: UploadFile = File(...), reques
             {"id": style_id}, {"$set": {"image_url": image_data}}
         )
 
-        return {"message": "Image uploaded", "style_id": style_id}
+        # Auto-generate haircut description from the uploaded reference image.
+        # Best-effort: failure here doesn't block the upload response.
+        auto_prompt = None
+        try:
+            auto_prompt = await _describe_haircut_from_image(image_data)
+            if auto_prompt:
+                await db.barbershop_styles.update_one(
+                    {"id": style_id}, {"$set": {"prompt_template": auto_prompt}}
+                )
+                logging.info(f"Auto-described style {style_id}: {auto_prompt}")
+        except Exception as desc_err:
+            logging.warning(f"Auto-description failed (non-fatal): {desc_err}")
+
+        return {
+            "message": "Image uploaded",
+            "style_id": style_id,
+            "auto_description": auto_prompt,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -402,6 +419,98 @@ DEFAULT_HAIRCUT_DESCRIPTION = "modern men's haircut, neat and clean"
 
 # Simple in-memory cache so we don't re-translate the same prompt every request
 _HAIRCUT_PROMPT_CACHE: dict = {}
+
+
+async def _describe_haircut_from_image(image_url_or_b64: str) -> Optional[str]:
+    """Use Gemini Vision to look at a reference image and produce a SHORT, CLEAN
+    English haircut/beard description suitable for FLUX Kontext. Returns None on failure.
+    """
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key or not image_url_or_b64:
+        return None
+
+    # Extract bytes from data URI or raw base64
+    try:
+        if image_url_or_b64.startswith("data:"):
+            header, b64data = image_url_or_b64.split(",", 1)
+            mime = header.split(":", 1)[1].split(";", 1)[0] or "image/jpeg"
+        else:
+            b64data = image_url_or_b64
+            mime = "image/jpeg"
+        img_bytes = base64.b64decode(b64data)
+    except Exception as e:
+        logging.warning(f"Could not decode reference image for description: {e}")
+        return None
+
+    try:
+        client = genai.Client(api_key=api_key)
+        instruction = (
+            "Look at this reference image of a men's haircut/beard style and write a "
+            "SHORT, CLEAN English description of the haircut and beard ONLY (ignore "
+            "the person's face, identity, clothing, background).\n\n"
+            "Rules:\n"
+            "- Output ONLY the description as ONE line.\n"
+            "- No quotes, no preface, no explanations.\n"
+            "- Describe: hair length, fade type, parting, texture, volume, sideburns, "
+            "and beard shape if present.\n"
+            "- Keep it under 25 words.\n\n"
+            "Description:"
+        )
+
+        def _run():
+            return client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    types.Part.from_bytes(data=img_bytes, mime_type=mime),
+                    types.Part.from_text(text=instruction),
+                ],
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+
+        response = await asyncio.to_thread(_run)
+        text_out = ""
+        try:
+            text_out = (response.text or "").strip()
+        except Exception:
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "text", None):
+                    text_out += part.text
+            text_out = text_out.strip()
+
+        text_out = text_out.splitlines()[0].strip().strip('"').strip("'") if text_out else ""
+        return text_out or None
+    except Exception as e:
+        logging.warning(f"Failed to describe haircut from image: {e}")
+        return None
+
+
+async def _ensure_style_prompt(style: dict) -> str:
+    """Return a usable haircut prompt for a style. If the style has no prompt yet,
+    auto-generate one from its reference image using Gemini Vision and save it.
+    """
+    existing = (style.get("prompt_template") or "").strip()
+    if existing:
+        return existing
+
+    ref_image = style.get("image_url")
+    if not ref_image:
+        return ""
+
+    described = await _describe_haircut_from_image(ref_image)
+    if not described:
+        return ""
+
+    # Persist for future requests so we don't pay for vision again
+    try:
+        await db.barbershop_styles.update_one(
+            {"id": style["id"]},
+            {"$set": {"prompt_template": described}},
+        )
+        logging.info(f"Auto-described style {style.get('id')}: {described}")
+    except Exception as e:
+        logging.warning(f"Failed to persist auto-description: {e}")
+
+    return described
 
 
 async def _translate_haircut_prompt(pt_text: str) -> str:
@@ -631,8 +740,11 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             b64 = b64.split(",", 1)[1]
         image_bytes = base64.b64decode(b64)
 
-        custom_prompt = (style.get("prompt_template") or "").strip()
-        # Auto-translate Portuguese -> detailed English for FLUX Kontext
+        # Auto-describe from reference image if no prompt is saved yet (one-time per style)
+        custom_prompt = await _ensure_style_prompt(style)
+        # Auto-translate Portuguese -> detailed English for FLUX Kontext (also cleans up
+        # English prompts). For freshly auto-described prompts (already English) this is
+        # essentially a pass-through after the in-memory cache is warm.
         replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====

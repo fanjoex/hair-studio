@@ -3,7 +3,6 @@ import { barbershopService } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Upload, Image as ImageIcon, BookOpen, Check } from "lucide-react";
@@ -22,34 +21,6 @@ const CATEGORIES = [
   { value: "beard", label: "Barba" },
   { value: "combo", label: "Combo" },
 ];
-
-// Exemplos de prompts que a IA entende bem (em português, são traduzidos automaticamente)
-const PROMPT_EXAMPLES = {
-  haircut: [
-    "fade baixo, lateral curta, cabelo médio em cima penteado pro lado",
-    "buzz cut, cabelo bem curto e uniforme, estilo militar",
-    "pompadour, volume em cima jogado pra trás, lateral fade",
-    "mohawk moderno, lateral raspada, faixa central alta e texturizada",
-    "undercut com topete, lateral raspada, em cima longo penteado pra cima",
-    "corte social clássico, risco do lado, lateral aparada",
-    "cabelo longo encaracolado natural, sem mudar o comprimento",
-    "navalhado, fade alto com risco do lado",
-  ],
-  beard: [
-    "barba cheia média, bem aparada, contorno definido",
-    "barba estilo pera, queixo com bigode conectado, bochechas raspadas",
-    "cavanhaque, só queixo e bigode, bochechas raspadas",
-    "barba curta tipo 5 o'clock shadow, uniforme",
-    "barba longa estilo lenhador, volumosa e cheia",
-    "bigode tipo handlebar, pontas curvadas, sem barba",
-  ],
-  combo: [
-    "fade baixo com barba cheia média bem aparada",
-    "undercut com barba estilo pera",
-    "cabelo curto social com cavanhaque",
-    "pompadour com barba curta uniforme",
-  ],
-};
 
 export function StylesPage() {
   const [styles, setStyles] = useState([]);
@@ -294,39 +265,11 @@ export function StylesPage() {
               <Label className="text-zinc-300">Descrição</Label>
               <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="mt-1 bg-background border-border text-white" placeholder="Descrição breve do estilo..." data-testid="style-description-input" />
             </div>
-            <div>
-              <Label className="text-zinc-300">
-                Descrição do corte para a IA <span className="text-amber-400">(recomendado)</span>
-              </Label>
-              <Textarea
-                value={formData.prompt_template}
-                onChange={(e) => setFormData({ ...formData, prompt_template: e.target.value })}
-                className="mt-1 bg-background border-border text-white min-h-[80px]"
-                placeholder="Ex: fade baixo, lateral curta, cabelo médio em cima penteado pro lado"
-                data-testid="style-prompt-input"
-                rows={3}
-              />
-              <p className="text-xs text-zinc-500 mt-1">
-                Quanto mais detalhado, mais fiel o resultado. Pode escrever em português normal —
-                a IA traduz automaticamente. Se deixar vazio, o resultado será genérico ou nem mudará a foto.
+            <div className="rounded-md bg-zinc-900/50 border border-zinc-800 p-3">
+              <p className="text-xs text-zinc-400">
+                ✨ <span className="text-zinc-300 font-medium">A IA descreve o corte automaticamente</span> a partir da foto de referência que você subir.
+                Você não precisa escrever nada.
               </p>
-              {(PROMPT_EXAMPLES[formData.category] || []).length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-zinc-400 mb-1">💡 Clique em um exemplo para usar:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(PROMPT_EXAMPLES[formData.category] || []).map((ex, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, prompt_template: ex })}
-                        className="text-xs px-2 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition"
-                      >
-                        {ex.length > 50 ? ex.slice(0, 50) + "…" : ex}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="flex gap-3 pt-2">
               <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
