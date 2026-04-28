@@ -12,6 +12,7 @@ import base64
 import os
 import logging
 import io
+import re
 from PIL import Image
 from google import genai
 from google.genai import types
@@ -663,12 +664,12 @@ async def _generate_with_replicate(image_bytes: bytes, haircut_text: str) -> Opt
 
     def _run():
         client = replicate_lib.Client(api_token=token)
-        # Use base FLUX Kontext Dev so we can pass a full edit instruction via `prompt`
+        # change-haircut is fine-tuned to ONLY change hair and preserve face identity
         return client.run(
-            "black-forest-labs/flux-kontext-dev",
+            "flux-kontext-apps/change-haircut",
             input={
                 "input_image": data_uri,
-                "prompt": haircut,
+                "haircut": haircut,
                 "aspect_ratio": "match_input_image",
                 "output_format": "jpg",
                 "safety_tolerance": 5,
@@ -827,26 +828,17 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         else:
             replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
 
-        # Build a full FLUX Kontext edit instruction (not just a bare description)
+        # For the change-haircut model the `haircut` param is just the style description.
+        # For haircut-only styles, strip any beard mention from the description.
         style_category = style.get("category", "")
-        base = replicate_prompt.rstrip(".,")
         if style_category == "haircut":
-            replicate_prompt = (
-                f"Change this person's hairstyle to: {base}. "
-                "Keep the face, skin tone, expression, beard, clothing, and background exactly the same. "
-                "Only the hair on top and sides should change."
-            )
-        elif style_category == "beard":
-            replicate_prompt = (
-                f"Change this person's beard/facial hair to: {base}. "
-                "Keep the hairstyle, face, skin tone, expression, clothing, and background exactly the same. "
-                "Only the beard and facial hair should change."
-            )
-        else:  # combo or unknown
-            replicate_prompt = (
-                f"Transform this person's hairstyle and beard to: {base}. "
-                "Keep the face, skin tone, expression, clothing, and background exactly the same."
-            )
+            # Remove common beard/stubble suffixes that Gemini might have included
+            replicate_prompt = re.sub(
+                r",?\s*(with |and )?(a |no )?(short|medium|long|neat|full|light|heavy|stubble|clean-shaven)?\s*(beard|stubble|facial hair)[^.]*",
+                "",
+                replicate_prompt,
+                flags=re.IGNORECASE,
+            ).strip().rstrip(",")
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
