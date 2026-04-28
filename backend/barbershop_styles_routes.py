@@ -472,7 +472,10 @@ async def get_style_image(style_id: str):
 # AI generation helpers (Replicate primary, Gemini fallback)
 # ============================================================================
 
-DEFAULT_HAIRCUT_DESCRIPTION = "modern men's haircut, neat and clean"
+DEFAULT_HAIRCUT_DESCRIPTION = (
+    "Give this person a modern, clean men's haircut with a fade on the sides. "
+    "Keep the face, expression, skin tone, and background exactly the same."
+)
 
 # Simple in-memory cache so we don't re-translate the same prompt every request
 _HAIRCUT_PROMPT_CACHE: dict = {}
@@ -660,12 +663,12 @@ async def _generate_with_replicate(image_bytes: bytes, haircut_text: str) -> Opt
 
     def _run():
         client = replicate_lib.Client(api_token=token)
-        # Replicate returns a FileOutput / URL / list depending on the model
+        # Use base FLUX Kontext Dev so we can pass a full edit instruction via `prompt`
         return client.run(
-            "flux-kontext-apps/change-haircut",
+            "black-forest-labs/flux-kontext-dev",
             input={
                 "input_image": data_uri,
-                "haircut": haircut,
+                "prompt": haircut,
                 "aspect_ratio": "match_input_image",
                 "output_format": "jpg",
                 "safety_tolerance": 5,
@@ -824,10 +827,26 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         else:
             replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
 
-        # For haircut-only styles, ensure the AI doesn't add/change facial hair
+        # Build a full FLUX Kontext edit instruction (not just a bare description)
         style_category = style.get("category", "")
-        if style_category == "haircut" and replicate_prompt:
-            replicate_prompt = replicate_prompt.rstrip(".,") + ", keep original facial hair unchanged"
+        base = replicate_prompt.rstrip(".,")
+        if style_category == "haircut":
+            replicate_prompt = (
+                f"Change this person's hairstyle to: {base}. "
+                "Keep the face, skin tone, expression, beard, clothing, and background exactly the same. "
+                "Only the hair on top and sides should change."
+            )
+        elif style_category == "beard":
+            replicate_prompt = (
+                f"Change this person's beard/facial hair to: {base}. "
+                "Keep the hairstyle, face, skin tone, expression, clothing, and background exactly the same. "
+                "Only the beard and facial hair should change."
+            )
+        else:  # combo or unknown
+            replicate_prompt = (
+                f"Transform this person's hairstyle and beard to: {base}. "
+                "Keep the face, skin tone, expression, clothing, and background exactly the same."
+            )
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
