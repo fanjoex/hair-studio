@@ -422,13 +422,18 @@ async def _translate_haircut_prompt(pt_text: str) -> str:
     try:
         client = genai.Client(api_key=api_key)
         instruction = (
-            "Translate the following Brazilian Portuguese description of a men's haircut "
-            "and/or beard into a SHORT, DETAILED ENGLISH prompt suitable for an image-editing "
-            "AI (FLUX Kontext). Output ONLY the English prompt as a single line, no quotes, "
-            "no preface, no explanations. Be specific about length, fade, parting, texture, "
-            "volume, sideburns and beard if mentioned.\n\n"
-            f"Portuguese: {pt_text}\n\n"
-            "English prompt:"
+            "You convert any haircut/beard style description (in Portuguese OR English, "
+            "possibly verbose) into a SHORT, CLEAN ENGLISH prompt for the FLUX Kontext "
+            "image-editing model.\n\n"
+            "Rules:\n"
+            "- Output ONLY the final English prompt as ONE single line.\n"
+            "- No quotes, no preface, no explanations, no 'Transform this person...' wording.\n"
+            "- Just describe the haircut/beard style itself: length, fade, parting, texture, "
+            "volume, sideburns, beard shape.\n"
+            "- Keep it under 25 words.\n"
+            "- If input is already a clean English description, just clean it up and return.\n\n"
+            f"Input: {pt_text}\n\n"
+            "Output:"
         )
 
         def _run():
