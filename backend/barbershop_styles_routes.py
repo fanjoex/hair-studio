@@ -266,6 +266,63 @@ async def upload_style_image(style_id: str, file: UploadFile = File(...), reques
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ===== ADMIN/DEBUG: backfill auto-descriptions for existing styles =====
+
+@styles_router.get("/_debug/styles/{barbershop_id}")
+async def debug_styles_prompts(barbershop_id: str):
+    """Public read-only debug: shows whether each style has a prompt and its length.
+    Does NOT leak the prompt content. Useful to verify the auto-describe ran.
+    """
+    styles = await db.barbershop_styles.find(
+        {"barbershop_id": barbershop_id, "active": True},
+        {"_id": 0, "id": 1, "name": 1, "prompt_template": 1, "image_url": 1},
+    ).sort("name", 1).to_list(200)
+    out = []
+    for s in styles:
+        prompt = (s.get("prompt_template") or "").strip()
+        out.append({
+            "id": s["id"],
+            "name": s.get("name"),
+            "has_image": bool(s.get("image_url")),
+            "has_prompt": bool(prompt),
+            "prompt_preview": prompt[:120] + ("…" if len(prompt) > 120 else ""),
+        })
+    return {"styles": out}
+
+
+@styles_router.post("/_debug/backfill-prompts/{barbershop_id}")
+async def backfill_style_prompts(barbershop_id: str):
+    """One-shot: re-runs Gemini Vision auto-describe for every active style of a barbershop
+    and persists the result. Returns a per-style status report.
+    Public on purpose so the dono can trigger via browser without copying tokens.
+    """
+    styles = await db.barbershop_styles.find(
+        {"barbershop_id": barbershop_id, "active": True},
+        {"_id": 0},
+    ).to_list(200)
+
+    results = []
+    for style in styles:
+        name = style.get("name", "?")
+        if not style.get("image_url"):
+            results.append({"name": name, "status": "skipped (no image)"})
+            continue
+        try:
+            described = await _describe_haircut_from_image(style["image_url"])
+            if described:
+                await db.barbershop_styles.update_one(
+                    {"id": style["id"]},
+                    {"$set": {"prompt_template": described}},
+                )
+                results.append({"name": name, "status": "ok", "prompt": described})
+            else:
+                results.append({"name": name, "status": "describe returned empty"})
+        except Exception as e:
+            results.append({"name": name, "status": f"error: {e}"})
+
+    return {"barbershop_id": barbershop_id, "count": len(results), "results": results}
+
+
 # ===== GLOBAL CATALOG: Browse + Import =====
 
 @styles_router.get("/barbershop/styles/catalog")
