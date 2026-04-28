@@ -132,7 +132,18 @@ export default function PublicTryStylePage({ kioskMode = false }) {
         style_id: selectedStyle.id,
       });
       setResult(data);
-      toast.success("Estilo aplicado!");
+      // Debug info — temporário pra diagnosticar por que a IA não muda a foto
+      if (data?._debug) {
+        const d = data._debug;
+        console.log("[try-style debug]", d);
+        if (d.same_as_input) {
+          toast.warning(`IA retornou imagem IGUAL ao input (engine=${d.engine}). Veja o console.`, { duration: 8000 });
+        } else {
+          toast.success(`Estilo aplicado! (via ${d.engine})`);
+        }
+      } else {
+        toast.success("Estilo aplicado!");
+      }
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erro ao gerar estilo");
     } finally {

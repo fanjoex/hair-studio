@@ -806,9 +806,14 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
+        debug_engine = None
+        debug_replicate_error = None
         try:
             generated_image = await _generate_with_replicate(image_bytes, replicate_prompt)
+            if generated_image:
+                debug_engine = "replicate"
         except Exception as rep_err:
+            debug_replicate_error = str(rep_err)
             logging.warning(f"Replicate generation failed, falling back to Gemini: {rep_err}")
             generated_image = None
 
@@ -816,6 +821,8 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         if not generated_image:
             try:
                 generated_image = await _generate_with_gemini(image_bytes, style, custom_prompt)
+                if generated_image:
+                    debug_engine = "gemini"
             except HTTPException:
                 raise
             except Exception as gem_err:
@@ -824,6 +831,21 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
 
         if not generated_image:
             raise HTTPException(status_code=500, detail="Failed to generate image")
+
+        # Compute a tiny hash to detect if the AI returned the input unchanged.
+        try:
+            import hashlib
+            input_hash = hashlib.md5(image_bytes).hexdigest()[:10]
+            output_hash = hashlib.md5(base64.b64decode(generated_image)).hexdigest()[:10]
+            debug_same_as_input = (input_hash == output_hash)
+            logging.info(
+                f"try-style style={style.get('name')} engine={debug_engine} "
+                f"prompt='{replicate_prompt[:80]}' input_hash={input_hash} "
+                f"output_hash={output_hash} same={debug_same_as_input}"
+            )
+        except Exception:
+            input_hash = output_hash = None
+            debug_same_as_input = None
 
         # Save to client history if logged in as client
         if current_user and current_user.get("role") == "client":
@@ -849,6 +871,14 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             "style_name": style["name"],
             "generated_image": generated_image,
             "barbershop_name": barbershop["name"],
+            "_debug": {
+                "engine": debug_engine,
+                "replicate_error": debug_replicate_error,
+                "prompt_used": replicate_prompt,
+                "input_hash": input_hash,
+                "output_hash": output_hash,
+                "same_as_input": debug_same_as_input,
+            },
         }
     except HTTPException:
         raise
