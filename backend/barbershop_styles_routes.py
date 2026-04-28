@@ -308,7 +308,7 @@ async def backfill_style_prompts(barbershop_id: str):
             results.append({"name": name, "status": "skipped (no image)"})
             continue
         try:
-            described = await _describe_haircut_from_image(style["image_url"])
+            described = await _describe_haircut_from_image(style["image_url"], category=style.get("category", ""))
             if described:
                 await db.barbershop_styles.update_one(
                     {"id": style["id"]},
@@ -478,9 +478,10 @@ DEFAULT_HAIRCUT_DESCRIPTION = "modern men's haircut, neat and clean"
 _HAIRCUT_PROMPT_CACHE: dict = {}
 
 
-async def _describe_haircut_from_image(image_url_or_b64: str) -> Optional[str]:
+async def _describe_haircut_from_image(image_url_or_b64: str, category: str = "") -> Optional[str]:
     """Use Gemini Vision to look at a reference image and produce a SHORT, CLEAN
     English haircut/beard description suitable for FLUX Kontext. Returns None on failure.
+    Pass category='haircut' to describe ONLY the hairstyle (no beard).
     """
     api_key = os.getenv("EMERGENT_LLM_KEY")
     if not api_key or not image_url_or_b64:
@@ -501,15 +502,25 @@ async def _describe_haircut_from_image(image_url_or_b64: str) -> Optional[str]:
 
     try:
         client = genai.Client(api_key=api_key)
+        haircut_only = category == "haircut"
+        if haircut_only:
+            beard_rule = (
+                "- IMPORTANT: DO NOT describe facial hair, beard, or stubble at all. "
+                "Describe ONLY the hairstyle (top hair, fade, parting, texture, volume, sideburns).\n"
+            )
+        else:
+            beard_rule = (
+                "- Describe beard shape and length if present.\n"
+            )
         instruction = (
-            "Look at this reference image of a men's haircut/beard style and write a "
-            "SHORT, CLEAN English description of the haircut and beard ONLY (ignore "
-            "the person's face, identity, clothing, background).\n\n"
+            "Look at this reference image of a men's style and write a "
+            "SHORT, CLEAN English description. Ignore the person's face, identity, "
+            "clothing, and background.\n\n"
             "Rules:\n"
             "- Output ONLY the description as ONE line.\n"
             "- No quotes, no preface, no explanations.\n"
-            "- Describe: hair length, fade type, parting, texture, volume, sideburns, "
-            "and beard shape if present.\n"
+            "- Describe: hair length, fade type, parting, texture, volume, sideburns.\n"
+            + beard_rule +
             "- Keep it under 25 words.\n\n"
             "Description:"
         )
@@ -553,7 +564,7 @@ async def _ensure_style_prompt(style: dict) -> str:
     if not ref_image:
         return ""
 
-    described = await _describe_haircut_from_image(ref_image)
+    described = await _describe_haircut_from_image(ref_image, category=style.get("category", ""))
     if not described:
         return ""
 
@@ -812,6 +823,11 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             replicate_prompt = custom_prompt  # already good English, use as-is
         else:
             replicate_prompt = await _translate_haircut_prompt(custom_prompt or style.get("name", ""))
+
+        # For haircut-only styles, ensure the AI doesn't add/change facial hair
+        style_category = style.get("category", "")
+        if style_category == "haircut" and replicate_prompt:
+            replicate_prompt = replicate_prompt.rstrip(".,") + ", keep original facial hair unchanged"
 
         # ===== Try Replicate (FLUX Kontext) first - faster and faithful =====
         generated_image = None
