@@ -475,7 +475,7 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
 
         response = await asyncio.to_thread(
             gen_client.models.generate_content,
-            model="gemini-2.5-flash-preview-05-20",
+            model="gemini-2.5-flash-image",
             contents=contents,
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"],
