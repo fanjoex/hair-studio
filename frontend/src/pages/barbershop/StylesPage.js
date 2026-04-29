@@ -202,9 +202,9 @@ export function StylesPage() {
           {styles.map((style) => (
             <Card key={style.id} className={`bg-surface border-border hover:border-primary/20 transition-all overflow-hidden ${!style.active ? "opacity-60" : ""}`} data-testid={`style-card-${style.id}`}>
               {/* Image */}
-              <div className="relative h-40 bg-zinc-900 flex items-center justify-center">
+              <div className="relative aspect-[3/4] bg-zinc-950 overflow-hidden">
                 {style.has_image ? (
-                  <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
+                  <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-contain object-top" />
                 ) : (
                   <ImageIcon className="w-12 h-12 text-zinc-700" />
                 )}
