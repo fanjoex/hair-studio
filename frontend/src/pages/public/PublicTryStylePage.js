@@ -232,9 +232,9 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                           className={`cursor-pointer overflow-hidden bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
                           data-testid={`public-style-card-${style.id}`}
                         >
-                          <div className="h-24 bg-zinc-900 flex items-center justify-center">
+                          <div className="aspect-[3/4] bg-zinc-900 overflow-hidden">
                             {style.has_image ? (
-                              <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
+                              <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover object-top" />
                             ) : (
                               <Scissors className="w-8 h-8 text-zinc-700" />
                             )}
