@@ -420,14 +420,67 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             b64 = b64.split(",", 1)[1]
         image_bytes = base64.b64decode(b64)
 
+        # Build contents: instruction + client photo + optional reference image
+        style_name = style.get("name", "")
+        prompt_text = (style.get("prompt_template") or "").strip()
+
+        ref_image_url = style.get("image_url")
+        if ref_image_url:
+            # Decode reference image bytes
+            try:
+                if ref_image_url.startswith("data:"):
+                    ref_header, ref_b64 = ref_image_url.split(",", 1)
+                    ref_mime = ref_header.split(":")[1].split(";")[0] or "image/jpeg"
+                else:
+                    ref_b64 = ref_image_url
+                    ref_mime = "image/jpeg"
+                ref_bytes = base64.b64decode(ref_b64)
+            except Exception:
+                ref_bytes = None
+                ref_mime = "image/jpeg"
+        else:
+            ref_bytes = None
+            ref_mime = "image/jpeg"
+
+        if ref_bytes:
+            instruction = (
+                f"You are a professional hairstylist photo editor.\n\n"
+                f"IMAGE 1 is the CLIENT photo. IMAGE 2 is a HAIRSTYLE REFERENCE.\n\n"
+                f"Task: Edit IMAGE 1 so the client has the hairstyle shown in IMAGE 2.\n\n"
+                f"STRICT RULES:\n"
+                f"- Preserve EXACTLY: the client's face, facial features, skin tone, expression, "
+                f"eye color, beard/facial hair, clothing, and background from IMAGE 1.\n"
+                f"- Change ONLY: the hair on top of the head and the sides, to match IMAGE 2.\n"
+                f"- Do NOT copy the face or identity from IMAGE 2.\n"
+                f"- Do NOT add or remove beard/facial hair.\n"
+                f"- Output a realistic photo-quality result.\n"
+                + (f"\nAdditional style notes: {prompt_text}" if prompt_text else "")
+            )
+            contents = [
+                types.Part.from_text(text=instruction),
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime),
+            ]
+        else:
+            # No reference image — fall back to text-only prompt
+            instruction = (
+                f"Edit this photo: apply the following hairstyle to the person. "
+                f"Preserve their face, skin tone, expression, beard, clothing, and background exactly. "
+                f"Change only the hair.\n\nHairstyle: {prompt_text or style_name}"
+            )
+            contents = [
+                types.Part.from_text(text=instruction),
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            ]
+
         response = await asyncio.to_thread(
             gen_client.models.generate_content,
-            model="gemini-2.5-flash-image",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_text(text=style["prompt_template"])
-            ],
-            config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"])
+            model="gemini-2.5-flash-preview-05-20",
+            contents=contents,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+                temperature=0.7,
+            )
         )
 
         generated_image = None
