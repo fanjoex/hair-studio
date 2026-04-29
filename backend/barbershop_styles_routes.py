@@ -445,16 +445,20 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
         if ref_bytes:
             instruction = (
                 f"You are a professional hairstylist photo editor.\n\n"
-                f"IMAGE 1 is the CLIENT photo. IMAGE 2 is a HAIRSTYLE REFERENCE.\n\n"
-                f"Task: Edit IMAGE 1 so the client has the hairstyle shown in IMAGE 2.\n\n"
-                f"STRICT RULES:\n"
-                f"- Preserve EXACTLY: the client's face, facial features, skin tone, expression, "
-                f"eye color, beard/facial hair, clothing, and background from IMAGE 1.\n"
-                f"- Change ONLY: the hair on top of the head and the sides, to match IMAGE 2.\n"
-                f"- Do NOT copy the face or identity from IMAGE 2.\n"
-                f"- Do NOT add or remove beard/facial hair.\n"
-                f"- Output a realistic photo-quality result.\n"
-                + (f"\nAdditional style notes: {prompt_text}" if prompt_text else "")
+                f"IMAGE 1 = CLIENT (the person to edit).\n"
+                f"IMAGE 2 = HAIR REFERENCE ONLY (ignore everything except the hairstyle shape).\n\n"
+                f"YOUR ONLY TASK: Change the hair on top and sides of the person in IMAGE 1 "
+                f"to match the HAIRSTYLE SHAPE from IMAGE 2.\n\n"
+                f"ABSOLUTE RULES — never break these:\n"
+                f"1. Keep the EXACT face, eyes, nose, mouth, skin tone, and expression from IMAGE 1.\n"
+                f"2. Keep the EXACT beard and facial hair from IMAGE 1. "
+                f"If IMAGE 1 has no beard, the result must have NO beard. "
+                f"If IMAGE 1 has a beard, keep it exactly as-is.\n"
+                f"3. Keep the EXACT clothing and background from IMAGE 1.\n"
+                f"4. From IMAGE 2, use ONLY the hair cut shape, length, fade, and style.\n"
+                f"5. IGNORE the face, beard, skin, and identity of the person in IMAGE 2.\n"
+                f"6. Output a realistic, photo-quality portrait.\n"
+                + (f"\nHairstyle description: {prompt_text}" if prompt_text else "")
             )
             contents = [
                 types.Part.from_text(text=instruction),
