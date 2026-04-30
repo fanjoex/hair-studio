@@ -390,21 +390,54 @@ async def get_style_image(style_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _find_first_url(data):
+    """Recursively find first string starting with 'http' in nested dict/list."""
+    if isinstance(data, str) and data.startswith("http"):
+        return data
+    if isinstance(data, list):
+        for item in data:
+            found = _find_first_url(item)
+            if found:
+                return found
+    if isinstance(data, dict):
+        for v in data.values():
+            found = _find_first_url(v)
+            if found:
+                return found
+    return None
+
+
 async def _upload_to_youcam(client: httpx.AsyncClient, image_bytes: bytes, api_key: str) -> str:
     """Register + upload an image to YouCam. Returns file_id."""
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "content-type": "application/json"}
 
-    reg = await client.post(f"{YOUCAM_BASE}/s2s/v2.1/file/hair-transfer", headers=headers, json={})
+    reg_body = {
+        "files": [
+            {
+                "content_type": "image/jpg",
+                "file_name": "image.jpg",
+                "file_size": len(image_bytes),
+            }
+        ]
+    }
+    reg = await client.post(f"{YOUCAM_BASE}/s2s/v2.1/file/hair-transfer", headers=headers, json=reg_body)
     reg.raise_for_status()
     reg_data = reg.json()
 
-    upload_url = reg_data.get("upload_url") or reg_data.get("data", {}).get("upload_url")
-    file_id = reg_data.get("file_id") or reg_data.get("data", {}).get("file_id")
+    inner = reg_data.get("data") or reg_data
+    files = inner.get("files") or []
+    file_info = files[0] if files else inner
+
+    file_id = file_info.get("file_id")
+    requests_list = file_info.get("requests") or []
+    req_info = requests_list[0] if requests_list else file_info
+
+    upload_url = req_info.get("url")
+    put_headers = req_info.get("headers") or {"Content-Type": "image/jpg"}
 
     if not upload_url or not file_id:
         raise ValueError(f"Unexpected YouCam register response: {reg_data}")
 
-    put_headers = {"Content-Type": "image/jpg", "Content-Length": str(len(image_bytes))}
     put_resp = await client.put(upload_url, content=image_bytes, headers=put_headers)
     put_resp.raise_for_status()
 
@@ -413,8 +446,8 @@ async def _upload_to_youcam(client: httpx.AsyncClient, image_bytes: bytes, api_k
 
 async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str) -> str:
     """Full YouCam Hair Transfer flow. Returns base64 result image."""
-    auth_headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    timeout = httpx.Timeout(60.0)
+    auth_headers = {"Authorization": f"Bearer {api_key}", "content-type": "application/json"}
+    timeout = httpx.Timeout(120.0)
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         src_file_id = await _upload_to_youcam(client, src_bytes, api_key)
@@ -427,29 +460,25 @@ async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str
         )
         task_resp.raise_for_status()
         task_data = task_resp.json()
-        task_id = task_data.get("task_id") or task_data.get("data", {}).get("task_id")
+        inner_task = task_data.get("data") or task_data
+        task_id = inner_task.get("task_id")
 
         if not task_id:
             raise ValueError(f"No task_id in YouCam response: {task_data}")
 
         for _ in range(30):
-            await asyncio.sleep(2)
+            await asyncio.sleep(4)
             poll = await client.get(
                 f"{YOUCAM_BASE}/s2s/v2.1/task/hair-transfer/{task_id}",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"Authorization": f"Bearer {api_key}", "content-type": "application/json"},
             )
             poll.raise_for_status()
             poll_data = poll.json()
             inner = poll_data.get("data") or poll_data
-            status = inner.get("status", "")
+            status = inner.get("task_status") or inner.get("status", "")
 
-            if status in ("done", "completed", "success", "finished"):
-                result_url = (
-                    inner.get("result_url")
-                    or inner.get("image_url")
-                    or inner.get("output_url")
-                    or (inner.get("result") or {}).get("url")
-                )
+            if status == "success":
+                result_url = _find_first_url(inner)
                 if not result_url:
                     raise ValueError(f"No result URL in YouCam poll: {poll_data}")
                 img_resp = await client.get(result_url)
@@ -459,7 +488,7 @@ async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str
             if status in ("failed", "error"):
                 raise ValueError(f"YouCam task failed: {poll_data}")
 
-        raise ValueError("YouCam task timed out after 60s")
+        raise ValueError("YouCam task timed out after 120s")
 
 
 @styles_router.post("/public/barbershop/{barbershop_id}/try-style")
