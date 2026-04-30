@@ -16,8 +16,11 @@ from PIL import Image
 from google import genai
 from google.genai import types
 import asyncio
+import httpx
+import time
 
 styles_router = APIRouter(prefix="/api")
+YOUCAM_BASE = "https://yce-api-01.makeupar.com"
 db = None
 
 def set_styles_db(database):
@@ -387,6 +390,78 @@ async def get_style_image(style_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _upload_to_youcam(client: httpx.AsyncClient, image_bytes: bytes, api_key: str) -> str:
+    """Register + upload an image to YouCam. Returns file_id."""
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    reg = await client.post(f"{YOUCAM_BASE}/s2s/v2.1/file/hair-transfer", headers=headers, json={})
+    reg.raise_for_status()
+    reg_data = reg.json()
+
+    upload_url = reg_data.get("upload_url") or reg_data.get("data", {}).get("upload_url")
+    file_id = reg_data.get("file_id") or reg_data.get("data", {}).get("file_id")
+
+    if not upload_url or not file_id:
+        raise ValueError(f"Unexpected YouCam register response: {reg_data}")
+
+    put_headers = {"Content-Type": "image/jpg", "Content-Length": str(len(image_bytes))}
+    put_resp = await client.put(upload_url, content=image_bytes, headers=put_headers)
+    put_resp.raise_for_status()
+
+    return file_id
+
+
+async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str) -> str:
+    """Full YouCam Hair Transfer flow. Returns base64 result image."""
+    auth_headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    timeout = httpx.Timeout(60.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        src_file_id = await _upload_to_youcam(client, src_bytes, api_key)
+        ref_file_id = await _upload_to_youcam(client, ref_bytes, api_key)
+
+        task_resp = await client.post(
+            f"{YOUCAM_BASE}/s2s/v2.1/task/hair-transfer",
+            headers=auth_headers,
+            json={"src_file_id": src_file_id, "ref_file_id": ref_file_id},
+        )
+        task_resp.raise_for_status()
+        task_data = task_resp.json()
+        task_id = task_data.get("task_id") or task_data.get("data", {}).get("task_id")
+
+        if not task_id:
+            raise ValueError(f"No task_id in YouCam response: {task_data}")
+
+        for _ in range(30):
+            await asyncio.sleep(2)
+            poll = await client.get(
+                f"{YOUCAM_BASE}/s2s/v2.1/task/hair-transfer/{task_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            poll.raise_for_status()
+            poll_data = poll.json()
+            inner = poll_data.get("data") or poll_data
+            status = inner.get("status", "")
+
+            if status in ("done", "completed", "success", "finished"):
+                result_url = (
+                    inner.get("result_url")
+                    or inner.get("image_url")
+                    or inner.get("output_url")
+                    or (inner.get("result") or {}).get("url")
+                )
+                if not result_url:
+                    raise ValueError(f"No result URL in YouCam poll: {poll_data}")
+                img_resp = await client.get(result_url)
+                img_resp.raise_for_status()
+                return base64.b64encode(img_resp.content).decode("utf-8")
+
+            if status in ("failed", "error"):
+                raise ValueError(f"YouCam task failed: {poll_data}")
+
+        raise ValueError("YouCam task timed out after 60s")
+
+
 @styles_router.post("/public/barbershop/{barbershop_id}/try-style")
 async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, request: Request):
     """Public AI style generation for barbershop clients. Saves to history if logged in as client."""
@@ -420,13 +495,9 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             b64 = b64.split(",", 1)[1]
         image_bytes = base64.b64decode(b64)
 
-        # Build contents: instruction + client photo + optional reference image
-        style_name = style.get("name", "")
-        prompt_text = (style.get("prompt_template") or "").strip()
-
+        # Decode style reference image
         ref_image_url = style.get("image_url")
         if ref_image_url:
-            # Decode reference image bytes
             try:
                 if ref_image_url.startswith("data:"):
                     ref_header, ref_b64 = ref_image_url.split(",", 1)
@@ -442,57 +513,70 @@ async def public_try_style(barbershop_id: str, data: PublicGenerateRequest, requ
             ref_bytes = None
             ref_mime = "image/jpeg"
 
-        if ref_bytes:
-            instruction = (
-                f"You are a professional hairstylist photo editor.\n\n"
-                f"IMAGE 1 = CLIENT (the person to edit).\n"
-                f"IMAGE 2 = HAIR REFERENCE ONLY (ignore everything except the hairstyle shape).\n\n"
-                f"YOUR ONLY TASK: Change the hair on top and sides of the person in IMAGE 1 "
-                f"to match the HAIRSTYLE SHAPE from IMAGE 2.\n\n"
-                f"ABSOLUTE RULES — never break these:\n"
-                f"1. The ONLY region you may change is the HAIR on top of the head and the sides/back above the ears.\n"
-                f"2. Everything EXCEPT the hair is FROZEN and must be pixel-perfect identical to IMAGE 1: "
-                f"face, eyes, nose, mouth, chin, cheeks, neck, beard, stubble, skin tone, expression, "
-                f"clothing color and style, and background scenery.\n"
-                f"3. The person in IMAGE 1 has a specific amount of facial hair. "
-                f"Do NOT add, remove, grow, or trim ANY facial hair. Copy it exactly.\n"
-                f"4. From IMAGE 2, extract ONLY the hairstyle shape (cut, length, fade, volume, parting).\n"
-                f"5. Do NOT copy anything else from IMAGE 2 — not the face, beard, skin, or features.\n"
-                f"6. Output a realistic, photo-quality portrait.\n"
-                + (f"\nHairstyle description: {prompt_text}" if prompt_text else "")
-            )
-            contents = [
-                types.Part.from_text(text=instruction),
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime),
-            ]
-        else:
-            # No reference image — fall back to text-only prompt
-            instruction = (
-                f"Edit this photo: apply the following hairstyle to the person. "
-                f"Preserve their face, skin tone, expression, beard, clothing, and background exactly. "
-                f"Change only the hair.\n\nHairstyle: {prompt_text or style_name}"
-            )
-            contents = [
-                types.Part.from_text(text=instruction),
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-            ]
-
-        response = await asyncio.to_thread(
-            gen_client.models.generate_content,
-            model="gemini-2.5-flash-image",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                temperature=0.7,
-            )
-        )
-
+        # --- Try YouCam Hair Transfer first ---
+        youcam_key = os.getenv("YOUCAM_API_KEY")
         generated_image = None
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                generated_image = base64.b64encode(part.inline_data.data).decode("utf-8")
-                break
+
+        if youcam_key and ref_bytes:
+            try:
+                generated_image = await _generate_with_youcam(image_bytes, ref_bytes, youcam_key)
+            except Exception as yc_err:
+                logging.warning(f"YouCam failed, falling back to Gemini: {yc_err}")
+
+        # --- Fallback: Gemini ---
+        if not generated_image:
+            style_name = style.get("name", "")
+            prompt_text = (style.get("prompt_template") or "").strip()
+
+            if ref_bytes:
+                instruction = (
+                    f"You are a professional hairstylist photo editor.\n\n"
+                    f"IMAGE 1 = CLIENT (the person to edit).\n"
+                    f"IMAGE 2 = HAIR REFERENCE ONLY (ignore everything except the hairstyle shape).\n\n"
+                    f"YOUR ONLY TASK: Change the hair on top and sides of the person in IMAGE 1 "
+                    f"to match the HAIRSTYLE SHAPE from IMAGE 2.\n\n"
+                    f"ABSOLUTE RULES — never break these:\n"
+                    f"1. The ONLY region you may change is the HAIR on top of the head and the sides/back above the ears.\n"
+                    f"2. Everything EXCEPT the hair is FROZEN and must be pixel-perfect identical to IMAGE 1: "
+                    f"face, eyes, nose, mouth, chin, cheeks, neck, beard, stubble, skin tone, expression, "
+                    f"clothing color and style, and background scenery.\n"
+                    f"3. Do NOT add, remove, grow, or trim ANY facial hair. Copy it exactly from IMAGE 1.\n"
+                    f"4. From IMAGE 2, extract ONLY the hairstyle shape (cut, length, fade, volume, parting).\n"
+                    f"5. Do NOT copy anything else from IMAGE 2.\n"
+                    f"6. Output a realistic, photo-quality portrait.\n"
+                    + (f"\nHairstyle description: {prompt_text}" if prompt_text else "")
+                )
+                contents = [
+                    types.Part.from_text(text=instruction),
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                    types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime),
+                ]
+            else:
+                instruction = (
+                    f"Edit this photo: apply the following hairstyle to the person. "
+                    f"Preserve their face, skin tone, expression, beard, clothing, and background exactly. "
+                    f"Change only the hair.\n\nHairstyle: {prompt_text or style_name}"
+                )
+                contents = [
+                    types.Part.from_text(text=instruction),
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                ]
+
+            response = await asyncio.to_thread(
+                gen_client.models.generate_content,
+                model="gemini-2.5-flash-image",
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    response_modalities=["IMAGE", "TEXT"],
+                    temperature=0.7,
+                )
+            )
+
+            for part in response.candidates[0].content.parts:
+                if part.inline_data is not None:
+                    generated_image = base64.b64encode(part.inline_data.data).decode("utf-8")
+                    break
+
         if not generated_image:
             raise HTTPException(status_code=500, detail="Failed to generate image")
 
