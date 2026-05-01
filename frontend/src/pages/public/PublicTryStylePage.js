@@ -229,7 +229,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                         <Card
                           key={style.id}
                           onClick={() => setSelectedStyle(style)}
-                          className={`cursor-pointer overflow-hidden bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
+                          className={`cursor-pointer bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
                           data-testid={`public-style-card-${style.id}`}
                         >
                           <div className="w-full bg-zinc-950">

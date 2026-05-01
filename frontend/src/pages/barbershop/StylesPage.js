@@ -200,7 +200,7 @@ export function StylesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {styles.map((style) => (
-            <Card key={style.id} className={`bg-surface border-border hover:border-primary/20 transition-all overflow-hidden ${!style.active ? "opacity-60" : ""}`} data-testid={`style-card-${style.id}`}>
+            <Card key={style.id} className={`bg-surface border-border hover:border-primary/20 transition-all ${!style.active ? "opacity-60" : ""}`} data-testid={`style-card-${style.id}`}>
               {/* Image */}
               <div className="relative w-full bg-zinc-950">
                 {style.has_image ? (
