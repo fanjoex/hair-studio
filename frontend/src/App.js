@@ -817,11 +817,12 @@ function App() {
                     }`}
                   >
                     {style.image_url ? (
-                      <img 
-                        src={style.image_url} 
-                        alt={style.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="style-image-container">
+                        <img 
+                          src={style.image_url} 
+                          alt={style.name}
+                        />
+                      </div>
                     ) : (
                       <div className="w-full h-full bg-surface flex items-center justify-center">
                         <Scissors className="w-8 h-8 text-muted" />
@@ -864,11 +865,12 @@ function App() {
                     }`}
                   >
                     {style.image_url ? (
-                      <img 
-                        src={style.image_url} 
-                        alt={style.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="style-image-container">
+                        <img 
+                          src={style.image_url} 
+                          alt={style.name}
+                        />
+                      </div>
                     ) : (
                       <div className="w-full h-full bg-surface flex items-center justify-center">
                         <Scissors className="w-8 h-8 text-muted" />
