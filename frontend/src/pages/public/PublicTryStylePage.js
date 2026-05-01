@@ -212,7 +212,9 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                 <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileUpload} />
               </label>
             </div>
-            <AffiliateBanner />
+            <div className="mt-8 px-4 max-w-4xl mx-auto w-full">
+              <AffiliateBanner />
+            </div>
           </div>
         )}
 
