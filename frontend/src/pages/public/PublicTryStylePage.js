@@ -264,6 +264,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                         </Card>
                       ))}
                     </div>
+                    <AffiliateBanner />
                     <div className="flex items-center justify-between mb-2 px-1">
                       <div className="flex items-center gap-2 text-sm text-zinc-400">
                         <Coins className="w-4 h-4 text-gold" />
@@ -325,7 +326,6 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                 Nova Foto
               </Button>
             </div>
-            <AffiliateBanner />
           </div>
         )}
       </div>
