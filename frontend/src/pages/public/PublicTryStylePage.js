@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Camera, ArrowLeft, Download, Scissors, Image as ImageIcon, Coins } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import AffiliateBanner from "@/components/AffiliateBanner";
+import { AffiliateBanner } from "@/components/AffiliateBanner";
 import PaymentQR from "@/components/PaymentQR";
 import "@/App.css";
 
