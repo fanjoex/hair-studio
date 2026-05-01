@@ -111,7 +111,8 @@
                 if (fromEnv && fromEnv.indexOf("REACT_APP_") === -1 && fromEnv.length > 0) {
                     window.__BACKEND_URL__ = fromEnv.replace(/\/+$/, "");
                 } else if (window.location.hostname === 'localhost') {
-                    window.__BACKEND_URL__ = 'http://localhost:8000';
+                    // Use remote backend for local testing (change to 'http://localhost:8000' if running backend locally)
+                    window.__BACKEND_URL__ = 'https://hair-beard-studio-api.onrender.com';
                 } else {
                     window.__BACKEND_URL__ = window.location.origin;
                 }
