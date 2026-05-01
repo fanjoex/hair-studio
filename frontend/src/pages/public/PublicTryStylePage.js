@@ -4,8 +4,10 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Camera, ArrowLeft, Download, Scissors, Image as ImageIcon } from "lucide-react";
+import { Upload, Camera, ArrowLeft, Download, Scissors, Image as ImageIcon, Coins } from "lucide-react";
 import { toast, Toaster } from "sonner";
+import AffiliateBanner from "@/components/AffiliateBanner";
+import PaymentQR from "@/components/PaymentQR";
 import "@/App.css";
 
 const BACKEND_URL = window.__BACKEND_URL__ || window.location.origin;
@@ -24,6 +26,8 @@ export default function PublicTryStylePage({ kioskMode = false }) {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [credits, setCredits] = useState(3); // Start with 3 free uses
+  const [showPayment, setShowPayment] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -124,6 +128,13 @@ export default function PublicTryStylePage({ kioskMode = false }) {
 
   const handleGenerate = async () => {
     if (!photoBase64 || !selectedStyle) return;
+    
+    // Check credits
+    if (credits <= 0) {
+      setShowPayment(true);
+      return;
+    }
+    
     setGenerating(true);
     setResult(null);
     try {
@@ -132,12 +143,19 @@ export default function PublicTryStylePage({ kioskMode = false }) {
         style_id: selectedStyle.id,
       });
       setResult(data);
+      setCredits(c => c - 1); // Decrement credit
       toast.success("Estilo aplicado!");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erro ao gerar estilo");
     } finally {
       setGenerating(false);
     }
+  };
+
+  const handlePaymentSuccess = (uses) => {
+    setCredits(uses);
+    setShowPayment(false);
+    toast.success(`${uses} créditos adicionados!`);
   };
 
   const downloadResult = () => {
@@ -246,6 +264,17 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                         </Card>
                       ))}
                     </div>
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <div className="flex items-center gap-2 text-sm text-zinc-400">
+                        <Coins className="w-4 h-4 text-gold" />
+                        <span>Créditos: <span className={credits > 0 ? "text-green-400" : "text-red-400"}>{credits}</span></span>
+                      </div>
+                      {credits <= 0 && (
+                        <button onClick={() => setShowPayment(true)} className="text-xs text-primary hover:underline">
+                          Comprar créditos
+                        </button>
+                      )}
+                    </div>
                     <Button
                       onClick={handleGenerate}
                       disabled={!selectedStyle || generating}
@@ -253,7 +282,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                       data-testid="public-generate-button"
                     >
                       <Scissors className="w-5 h-5 mr-2" />
-                      {generating ? "Gerando com IA..." : "Experimentar Estilo"}
+                      {generating ? "Gerando com IA..." : credits > 0 ? "Experimentar Estilo" : "Comprar Créditos"}
                     </Button>
                   </>
                 )}
@@ -296,9 +325,18 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                 Nova Foto
               </Button>
             </div>
+            <AffiliateBanner />
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {showPayment && (
+        <PaymentQR 
+          onClose={() => setShowPayment(false)} 
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
 
       {/* Camera Modal */}
       {showCamera && (
