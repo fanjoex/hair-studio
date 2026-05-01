@@ -213,7 +213,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
               </label>
             </div>
             <div className="mt-8 px-4 max-w-4xl mx-auto w-full">
-              <AffiliateBanner />
+              <AffiliateBanner barbershopId={barbershopId} />
             </div>
           </div>
         )}

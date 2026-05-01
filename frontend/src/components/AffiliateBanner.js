@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import { QRCodeSVG } from "qrcode.react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, ShoppingBag, X } from "lucide-react";
+import { ExternalLink, ShoppingBag, X, Loader2 } from "lucide-react";
 
 // Configuração de produtos afiliados
 const AFFILIATE_PRODUCTS = [
@@ -44,8 +45,46 @@ const AFFILIATE_PRODUCTS = [
   }
 ];
 
-export function AffiliateBanner() {
+const BACKEND_URL = window.__BACKEND_URL__ || window.location.origin;
+const API = `${BACKEND_URL}/api`;
+
+export function AffiliateBanner({ barbershopId }) {
   const [showQR, setShowQR] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch advertisements from backend if barbershopId is provided
+    if (barbershopId) {
+      fetchAdvertisements();
+    } else {
+      // Use hardcoded fallback
+      setProducts(AFFILIATE_PRODUCTS);
+      setLoading(false);
+    }
+  }, [barbershopId]);
+
+  const fetchAdvertisements = async () => {
+    try {
+      const { data } = await axios.get(`${API}/advertisements/public/${barbershopId}`);
+      setProducts(data.length > 0 ? data : AFFILIATE_PRODUCTS);
+    } catch (e) {
+      // Fallback to hardcoded if API fails
+      setProducts(AFFILIATE_PRODUCTS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-8 flex justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-gold" />
+      </div>
+    );
+  }
+
+  if (products.length === 0) return null;
 
   return (
     <div className="mt-8">
@@ -58,7 +97,7 @@ export function AffiliateBanner() {
       </p>
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {AFFILIATE_PRODUCTS.map((product) => (
+        {products.map((product) => (
           <Card key={product.id} className="bg-surface border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-all" onClick={() => setShowQR(product)}>
             <div className="aspect-square bg-zinc-900 flex items-center justify-center">
               <img 
