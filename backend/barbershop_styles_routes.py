@@ -423,6 +423,7 @@ async def _upload_to_youcam(client: httpx.AsyncClient, image_bytes: bytes, api_k
     reg = await client.post(f"{YOUCAM_BASE}/s2s/v2.1/file/hair-transfer", headers=headers, json=reg_body)
     reg.raise_for_status()
     reg_data = reg.json()
+    logging.info(f"YouCam file register response: {reg_data}")
 
     inner = reg_data.get("data") or reg_data
     files = inner.get("files") or []
@@ -440,6 +441,7 @@ async def _upload_to_youcam(client: httpx.AsyncClient, image_bytes: bytes, api_k
 
     put_resp = await client.put(upload_url, content=image_bytes, headers=put_headers)
     put_resp.raise_for_status()
+    logging.info(f"YouCam file upload success for file_id: {file_id}")
 
     return file_id
 
@@ -453,13 +455,16 @@ async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str
         src_file_id = await _upload_to_youcam(client, src_bytes, api_key)
         ref_file_id = await _upload_to_youcam(client, ref_bytes, api_key)
 
+        task_body = {"src_file_id": src_file_id, "ref_file_id": ref_file_id}
+        logging.info(f"YouCam task body: {task_body}")
         task_resp = await client.post(
             f"{YOUCAM_BASE}/s2s/v2.1/task/hair-transfer",
             headers=auth_headers,
-            json={"src_file_id": src_file_id, "ref_file_id": ref_file_id},
+            json=task_body,
         )
         task_resp.raise_for_status()
         task_data = task_resp.json()
+        logging.info(f"YouCam task create response: {task_data}")
         inner_task = task_data.get("data") or task_data
         task_id = inner_task.get("task_id")
 
@@ -474,15 +479,18 @@ async def _generate_with_youcam(src_bytes: bytes, ref_bytes: bytes, api_key: str
             )
             poll.raise_for_status()
             poll_data = poll.json()
+            logging.info(f"YouCam poll response: {poll_data}")
             inner = poll_data.get("data") or poll_data
             status = inner.get("task_status") or inner.get("status", "")
 
             if status == "success":
                 result_url = _find_first_url(inner)
+                logging.info(f"YouCam result URL found: {result_url}")
                 if not result_url:
                     raise ValueError(f"No result URL in YouCam poll: {poll_data}")
                 img_resp = await client.get(result_url)
                 img_resp.raise_for_status()
+                logging.info(f"YouCam result downloaded, size: {len(img_resp.content)} bytes")
                 return base64.b64encode(img_resp.content).decode("utf-8")
 
             if status in ("failed", "error"):
