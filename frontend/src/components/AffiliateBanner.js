@@ -11,7 +11,7 @@ const AFFILIATE_PRODUCTS = [
     name: "Pomada Modeladora Matte",
     brand: "American Crew",
     price: "R$ 89,90",
-    image: "https://m.media-amazon.com/images/I/71+3+1t3y4L._AC_SL1500_.jpg",
+    image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' fill='%23E4A853'%3E%3Crect width='200' height='200' fill='%2318181b'/%3E%3Ctext x='100' y='90' text-anchor='middle' fill='%23E4A853' font-size='14'%3EPomada%3C/text%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23a1a1aa' font-size='12'%3EAmerican Crew%3C/text%3E%3Ctext x='100' y='130' text-anchor='middle' fill='%23a1a1aa' font-size='11'%3ER$ 89,90%3C/text%3E%3C/svg%3E",
     affiliateUrl: "https://amzn.to/3ABC123", // Substitua pelo seu link real
     description: "Fixação forte, acabamento natural"
   },
@@ -20,7 +20,7 @@ const AFFILIATE_PRODUCTS = [
     name: "Shampoo Antiqueda",
     brand: "Boticário",
     price: "R$ 45,90",
-    image: "https://m.media-amazon.com/images/I/81+3ABC123.jpg",
+    image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' fill='%23E4A853'%3E%3Crect width='200' height='200' fill='%2318181b'/%3E%3Ctext x='100' y='90' text-anchor='middle' fill='%23E4A853' font-size='14'%3EShampoo%3C/text%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23a1a1aa' font-size='12'%3EBoticário%3C/text%3E%3Ctext x='100' y='130' text-anchor='middle' fill='%23a1a1aa' font-size='11'%3ER$ 45,90%3C/text%3E%3C/svg%3E",
     affiliateUrl: "https://amzn.to/3DEF456",
     description: "Fortalece e dá volume"
   },
@@ -29,7 +29,7 @@ const AFFILIATE_PRODUCTS = [
     name: "Kit Barbeador Elétrico",
     brand: "Wahl",
     price: "R$ 249,90",
-    image: "https://m.media-amazon.com/images/I/91+3GHI789.jpg",
+    image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' fill='%23E4A853'%3E%3Crect width='200' height='200' fill='%2318181b'/%3E%3Ctext x='100' y='90' text-anchor='middle' fill='%23E4A853' font-size='14'%3EBarbeador%3C/text%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23a1a1aa' font-size='12'%3EWahl%3C/text%3E%3Ctext x='100' y='130' text-anchor='middle' fill='%23a1a1aa' font-size='11'%3ER$ 249,90%3C/text%3E%3C/svg%3E",
     affiliateUrl: "https://amzn.to/3GHI789",
     description: "Precisão profissional em casa"
   },
@@ -38,7 +38,7 @@ const AFFILIATE_PRODUCTS = [
     name: "Óleo para Barba",
     brand: "Balm",
     price: "R$ 39,90",
-    image: "https://m.media-amazon.com/images/I/71+3JKL012.jpg",
+    image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' fill='%23E4A853'%3E%3Crect width='200' height='200' fill='%2318181b'/%3E%3Ctext x='100' y='90' text-anchor='middle' fill='%23E4A853' font-size='14'%3EÓleo Barba%3C/text%3E%3Ctext x='100' y='110' text-anchor='middle' fill='%23a1a1aa' font-size='12'%3EBalm%3C/text%3E%3Ctext x='100' y='130' text-anchor='middle' fill='%23a1a1aa' font-size='11'%3ER$ 39,90%3C/text%3E%3C/svg%3E",
     affiliateUrl: "https://amzn.to/3JKL012",
     description: "Hidratação e brilho natural"
   }
