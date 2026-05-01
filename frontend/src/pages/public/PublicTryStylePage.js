@@ -224,7 +224,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                   </Card>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-4">
                       {info.styles.map((style) => (
                         <Card
                           key={style.id}
@@ -232,7 +232,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                           className={`cursor-pointer bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
                           data-testid={`public-style-card-${style.id}`}
                         >
-                          <div className="w-full bg-zinc-950 aspect-[3/4] flex items-center justify-center">
+                          <div className="style-image-container">
                             {style.has_image ? (
                               <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-contain" />
                             ) : (

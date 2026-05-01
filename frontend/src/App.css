@@ -252,3 +252,22 @@ button[data-variant="secondary"],
   color: #ffd700;
   margin-bottom: 0.75rem;
 }
+
+/* Style reference image cards - force portrait to show face + full hair */
+.style-image-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4 !important;
+  background-color: #09090b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.style-image-container img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  display: block;
+}
