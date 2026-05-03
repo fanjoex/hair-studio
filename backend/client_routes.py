@@ -87,19 +87,39 @@ async def register_client(data: ClientRegister, response: Response):
         await db.users.insert_one(user_doc)
 
         # Try to link to existing client record (by phone or email) in barbershop
-        if data.barbershop_id and (data.phone or email):
-            query = {"barbershop_id": data.barbershop_id, "$or": []}
-            if data.phone:
-                query["$or"].append({"phone": data.phone})
-            if email:
-                query["$or"].append({"email": email})
-            if query["$or"]:
-                existing_client = await db.clients.find_one(query)
-                if existing_client:
-                    await db.clients.update_one(
-                        {"_id": existing_client["_id"]},
-                        {"$set": {"user_id": user_id}}
-                    )
+        # Se não existir, cria um novo registro de cliente na barbearia
+        if data.barbershop_id:
+            existing_client = None
+            if data.phone or email:
+                query = {"barbershop_id": data.barbershop_id, "$or": []}
+                if data.phone:
+                    query["$or"].append({"phone": data.phone})
+                if email:
+                    query["$or"].append({"email": email})
+                if query["$or"]:
+                    existing_client = await db.clients.find_one(query)
+
+            if existing_client:
+                await db.clients.update_one(
+                    {"_id": existing_client["_id"]},
+                    {"$set": {"user_id": user_id}}
+                )
+            else:
+                # Criar novo registro de cliente automaticamente
+                import uuid
+                now_iso = datetime.now(timezone.utc).isoformat()
+                client_doc = {
+                    "id": str(uuid.uuid4()),
+                    "barbershop_id": data.barbershop_id,
+                    "user_id": user_id,
+                    "name": data.name,
+                    "email": email,
+                    "phone": data.phone or "",
+                    "notes": "Auto-cadastrado pelo cliente",
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                }
+                await db.clients.insert_one(client_doc)
 
         access_token = create_access_token(user_id, email)
         refresh_token = create_refresh_token(user_id)
