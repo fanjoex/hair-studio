@@ -2,16 +2,26 @@
 Rotas para gerenciamento de propagandas.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Optional, List
 from datetime import datetime, timezone
 import logging
 
 from advertisement_models import Advertisement, AdvertisementCreate, AdvertisementUpdate
-from server import db, require_master_admin, require_barbershop_owner
 
 advertisement_router = APIRouter(prefix="/api/advertisements", tags=["advertisements"])
 logger = logging.getLogger(__name__)
+
+db = None
+
+def set_advertisement_db(database):
+    global db
+    db = database
+
+
+def _get_auth_deps():
+    from server import require_master_admin, require_barbershop_owner
+    return require_master_admin, require_barbershop_owner
 
 
 @advertisement_router.get("/public/{barbershop_id}")
@@ -51,23 +61,18 @@ async def get_public_advertisements(barbershop_id: str):
 
 
 @advertisement_router.get("/barbershop")
-async def get_barbershop_advertisements(
-    user: dict = Depends(require_barbershop_owner)
-):
+async def get_barbershop_advertisements(request: Request):
     """Buscar propagandas da barbearia logada."""
+    from server import require_barbershop_owner
+    user = await require_barbershop_owner(request)
     try:
         barbershop_id = user.get("barbershop_id")
-        
-        # Globais do admin
         global_ads = await db.advertisements.find(
             {"barbershop_id": None, "is_active": True}
         ).to_list(length=50)
-        
-        # Específicas desta barbearia
         custom_ads = await db.advertisements.find(
             {"barbershop_id": barbershop_id}
         ).to_list(length=50)
-        
         return {
             "global": [{"id": ad["id"], "name": ad["name"], "brand": ad["brand"],
                         "price": ad["price"], "description": ad["description"],
@@ -78,71 +83,47 @@ async def get_barbershop_advertisements(
                         "image_url": ad.get("image_url"), "affiliate_url": ad["affiliate_url"],
                         "is_active": ad["is_active"]} for ad in custom_ads]
         }
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching barbershop advertisements: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @advertisement_router.post("/barbershop")
-async def create_barbershop_advertisement(
-    data: AdvertisementCreate,
-    user: dict = Depends(require_barbershop_owner)
-):
+async def create_barbershop_advertisement(request: Request, data: AdvertisementCreate):
     """Criar propaganda própria da barbearia."""
+    from server import require_barbershop_owner
+    user = await require_barbershop_owner(request)
     try:
         barbershop_id = user.get("barbershop_id")
-        
-        # Verificar limite do plano (placeholder - implementar regras depois)
-        # Free: 0 custom, Pro: 4, Premium: ilimitado
-        
-        ad = Advertisement(
-            **data.model_dump(),
-            barbershop_id=barbershop_id
-        )
-        
+        ad = Advertisement(**data.model_dump(), barbershop_id=barbershop_id)
         ad_dict = ad.model_dump()
         ad_dict['created_at'] = ad_dict['created_at'].isoformat()
         ad_dict['updated_at'] = ad_dict['updated_at'].isoformat()
-        
         await db.advertisements.insert_one(ad_dict)
-        
         return {"id": ad.id, "message": "Advertisement created successfully"}
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating advertisement: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @advertisement_router.put("/barbershop/{ad_id}")
-async def update_barbershop_advertisement(
-    ad_id: str,
-    data: AdvertisementUpdate,
-    user: dict = Depends(require_barbershop_owner)
-):
+async def update_barbershop_advertisement(ad_id: str, request: Request, data: AdvertisementUpdate):
     """Atualizar propaganda própria da barbearia."""
+    from server import require_barbershop_owner
+    user = await require_barbershop_owner(request)
     try:
         barbershop_id = user.get("barbershop_id")
-        
-        # Verificar se existe e pertence a esta barbearia
-        existing = await db.advertisements.find_one({
-            "id": ad_id,
-            "barbershop_id": barbershop_id
-        })
-        
+        existing = await db.advertisements.find_one({"id": ad_id, "barbershop_id": barbershop_id})
         if not existing:
             raise HTTPException(status_code=404, detail="Advertisement not found")
-        
         update_data = {k: v for k, v in data.model_dump().items() if v is not None}
         update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-        
-        await db.advertisements.update_one(
-            {"id": ad_id},
-            {"$set": update_data}
-        )
-        
+        await db.advertisements.update_one({"id": ad_id}, {"$set": update_data})
         return {"message": "Advertisement updated successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -151,24 +132,16 @@ async def update_barbershop_advertisement(
 
 
 @advertisement_router.delete("/barbershop/{ad_id}")
-async def delete_barbershop_advertisement(
-    ad_id: str,
-    user: dict = Depends(require_barbershop_owner)
-):
+async def delete_barbershop_advertisement(ad_id: str, request: Request):
     """Deletar propaganda própria da barbearia."""
+    from server import require_barbershop_owner
+    user = await require_barbershop_owner(request)
     try:
         barbershop_id = user.get("barbershop_id")
-        
-        result = await db.advertisements.delete_one({
-            "id": ad_id,
-            "barbershop_id": barbershop_id
-        })
-        
+        result = await db.advertisements.delete_one({"id": ad_id, "barbershop_id": barbershop_id})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Advertisement not found")
-        
         return {"message": "Advertisement deleted successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -178,57 +151,57 @@ async def delete_barbershop_advertisement(
 
 # ===== MASTER ADMIN ROUTES =====
 
-@advertisement_router.get("/admin/all", dependencies=[Depends(require_master_admin)])
-async def get_all_advertisements_admin():
+@advertisement_router.get("/admin/all")
+async def get_all_advertisements_admin(request: Request):
     """Buscar todas propagandas (apenas master admin)."""
+    from server import require_master_admin
+    await require_master_admin(request)
     try:
         cursor = db.advertisements.find().sort("created_at", -1)
         ads = await cursor.to_list(length=100)
-        
         return [{"id": ad["id"], "name": ad["name"], "brand": ad["brand"],
                  "price": ad["price"], "description": ad["description"],
                  "image_url": ad.get("image_url"), "affiliate_url": ad["affiliate_url"],
                  "barbershop_id": ad.get("barbershop_id"), "is_active": ad["is_active"]} for ad in ads]
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching all advertisements: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@advertisement_router.post("/admin", dependencies=[Depends(require_master_admin)])
-async def create_global_advertisement(data: AdvertisementCreate):
+@advertisement_router.post("/admin")
+async def create_global_advertisement(request: Request, data: AdvertisementCreate):
     """Criar propaganda global (apenas master admin)."""
+    from server import require_master_admin
+    await require_master_admin(request)
     try:
-        ad = Advertisement(**data.model_dump())  # barbershop_id=None (global)
-        
+        ad = Advertisement(**data.model_dump())
         ad_dict = ad.model_dump()
         ad_dict['created_at'] = ad_dict['created_at'].isoformat()
         ad_dict['updated_at'] = ad_dict['updated_at'].isoformat()
-        
         await db.advertisements.insert_one(ad_dict)
-        
         return {"id": ad.id, "message": "Global advertisement created successfully"}
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating global advertisement: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@advertisement_router.put("/admin/{ad_id}", dependencies=[Depends(require_master_admin)])
-async def update_global_advertisement(ad_id: str, data: AdvertisementUpdate):
+@advertisement_router.put("/admin/{ad_id}")
+async def update_global_advertisement(ad_id: str, request: Request, data: AdvertisementUpdate):
     """Atualizar propaganda global (apenas master admin)."""
+    from server import require_master_admin
+    await require_master_admin(request)
     try:
         existing = await db.advertisements.find_one({"id": ad_id, "barbershop_id": None})
         if not existing:
             raise HTTPException(status_code=404, detail="Global advertisement not found")
-        
         update_data = {k: v for k, v in data.model_dump().items() if v is not None}
         update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-        
         await db.advertisements.update_one({"id": ad_id}, {"$set": update_data})
-        
         return {"message": "Global advertisement updated successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -236,17 +209,16 @@ async def update_global_advertisement(ad_id: str, data: AdvertisementUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@advertisement_router.delete("/admin/{ad_id}", dependencies=[Depends(require_master_admin)])
-async def delete_global_advertisement(ad_id: str):
+@advertisement_router.delete("/admin/{ad_id}")
+async def delete_global_advertisement(ad_id: str, request: Request):
     """Deletar propaganda global (apenas master admin)."""
+    from server import require_master_admin
+    await require_master_admin(request)
     try:
         result = await db.advertisements.delete_one({"id": ad_id, "barbershop_id": None})
-        
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Global advertisement not found")
-        
         return {"message": "Global advertisement deleted successfully"}
-        
     except HTTPException:
         raise
     except Exception as e:

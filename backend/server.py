@@ -608,6 +608,11 @@ from client_routes import client_router, set_client_db
 set_client_db(db)
 app.include_router(client_router)
 
+# Incluir rotas de propagandas/afiliados
+from advertisement_routes import advertisement_router, set_advertisement_db
+set_advertisement_db(db)
+app.include_router(advertisement_router)
+
 # CORS: list of allowed origins. We must NEVER use "*" together with
 # allow_credentials=True (browsers reject it), so we always send a specific list.
 # Override via CORS_ORIGINS env var (comma-separated). The defaults cover the
