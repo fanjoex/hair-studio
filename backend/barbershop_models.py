@@ -135,7 +135,7 @@ class ClientResponse(BaseModel):
     phone: str
     email: Optional[str]
     notes: Optional[str]
-    history_count: int
+    history_count: Optional[int] = 0
     created_at: datetime
 
 

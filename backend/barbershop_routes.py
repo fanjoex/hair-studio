@@ -457,9 +457,6 @@ async def list_clients(request: Request):
     try:
         user, barbershop_id = await require_barbershop_access(request)
         
-        # Debug logging
-        logging.info(f"list_clients - user_role: {user.get('role')}, barbershop_id: {barbershop_id}, user_barbershop_id: {user.get('barbershop_id')}")
-        
         # Se for master admin, pode filtrar por query param
         if user.get("role") == "master_admin" and not barbershop_id:
             # TODO: Implementar filtro por query param
