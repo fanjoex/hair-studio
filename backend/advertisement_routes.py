@@ -58,30 +58,38 @@ def _get_auth_deps():
 async def get_public_advertisements(barbershop_id: str):
     """
     Buscar propagandas para página pública da barbearia.
-    Retorna: globais do admin + específicas da barbearia (se plano permitir).
+    Regra:
+    - Plano PREMIUM ou BASIC: exibe apenas as próprias propagandas da barbearia (se houver)
+    - Plano FREE (ou sem propagandas próprias): exibe as globais do admin
     """
     try:
-        # Buscar barbearia para verificar plano
         barbershop = await db.barbershops.find_one({"id": barbershop_id})
         if not barbershop:
             raise HTTPException(status_code=404, detail="Barbershop not found")
-        
-        # Build query: globais (barbershop_id=null) + específicas desta barbearia
-        query = {
-            "is_active": True,
-            "$or": [
-                {"barbershop_id": None},  # Globais do admin
-                {"barbershop_id": barbershop_id}  # Específicas desta barbearia
-            ]
-        }
-        
-        cursor = db.advertisements.find(query).sort("created_at", -1)
-        ads = await cursor.to_list(length=100)
-        
+
+        plan = (barbershop.get("subscription") or {}).get("plan", "free")
+
+        # Planos pagos: priorizar propagandas próprias
+        if plan in ("basic", "premium"):
+            custom_ads = await db.advertisements.find(
+                {"barbershop_id": barbershop_id, "is_active": True}
+            ).sort("created_at", -1).to_list(length=100)
+
+            if custom_ads:
+                return [{"id": ad["id"], "name": ad["name"], "brand": ad["brand"],
+                         "price": ad["price"], "description": ad["description"],
+                         "image_url": ad.get("image_url"), "affiliate_url": ad["affiliate_url"],
+                         "is_custom": True} for ad in custom_ads]
+
+        # Fallback: propagandas globais do admin (plano free ou sem custom)
+        global_ads = await db.advertisements.find(
+            {"barbershop_id": None, "is_active": True}
+        ).sort("created_at", -1).to_list(length=100)
+
         return [{"id": ad["id"], "name": ad["name"], "brand": ad["brand"],
                  "price": ad["price"], "description": ad["description"],
                  "image_url": ad.get("image_url"), "affiliate_url": ad["affiliate_url"],
-                 "is_custom": ad.get("barbershop_id") is not None} for ad in ads]
+                 "is_custom": False} for ad in global_ads]
         
     except HTTPException:
         raise

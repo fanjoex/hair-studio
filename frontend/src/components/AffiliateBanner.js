@@ -67,10 +67,24 @@ export function AffiliateBanner({ barbershopId }) {
   const fetchAdvertisements = async () => {
     try {
       const { data } = await axios.get(`${API}/advertisements/public/${barbershopId}`);
-      setProducts(data.length > 0 ? data : AFFILIATE_PRODUCTS);
+      if (data.length > 0) {
+        // Normalizar campos da API para o formato esperado pelo componente
+        const placeholder = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect width='200' height='200' fill='%2318181b'/%3E%3Ctext x='100' y='100' text-anchor='middle' fill='%23E4A853' font-size='14' dy='.3em'%3EProduto%3C/text%3E%3C/svg%3E";
+        setProducts(data.map((ad) => ({
+          id: ad.id,
+          name: ad.name,
+          brand: ad.brand,
+          price: ad.price,
+          description: ad.description,
+          image: ad.image_url || placeholder,
+          affiliateUrl: ad.affiliate_url,
+        })));
+      } else {
+        setProducts([]);
+      }
     } catch (e) {
-      // Fallback to hardcoded if API fails
-      setProducts(AFFILIATE_PRODUCTS);
+      // Em caso de erro, não exibir nada
+      setProducts([]);
     } finally {
       setLoading(false);
     }
