@@ -9,6 +9,7 @@ import { MasterLayout } from "@/pages/master/MasterLayout";
 import { MasterDashboard } from "@/pages/master/Dashboard";
 import { BarbershopsList } from "@/pages/master/BarbershopsList";
 import { BarbershopForm } from "@/pages/master/BarbershopForm";
+import { AdvertisementsPage } from "@/pages/master/AdvertisementsPage";
 
 // Pages Barbershop
 import { BarbershopLayout } from "@/pages/barbershop/BarbershopLayout";
@@ -134,6 +135,7 @@ function AppRoutes() {
               <Route path="barbershops" element={<BarbershopsList />} />
               <Route path="barbershops/new" element={<BarbershopForm />} />
               <Route path="barbershops/:id/edit" element={<BarbershopForm />} />
+              <Route path="advertisements" element={<AdvertisementsPage />} />
             </Route>
           </Route>
 

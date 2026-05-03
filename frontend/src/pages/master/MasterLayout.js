@@ -1,7 +1,7 @@
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Store, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, Store, LogOut, Menu, X, Megaphone } from "lucide-react";
 import { useState } from "react";
 
 export function MasterLayout() {
@@ -18,6 +18,7 @@ export function MasterLayout() {
   const menuItems = [
     { path: "/master", icon: LayoutDashboard, label: "Dashboard" },
     { path: "/master/barbershops", icon: Store, label: "Barbearias" },
+    { path: "/master/advertisements", icon: Megaphone, label: "Propagandas" },
   ];
 
   const isActive = (path) => {
