@@ -156,15 +156,14 @@ async def fetch_product_from_url(url: str):
     Retorna name, brand, price, description, image_url, affiliate_url.
     """
     try:
-        # Resolver URL encurtado (meli.la, amzn.to, etc.) seguindo redirects
+        # Resolver URL encurtado seguindo redirects (GET, pois HEAD nem sempre redireciona)
         final_url = url
-        if any(short in url for short in ["meli.la", "amzn.to", "bit.ly", "tinyurl"]):
-            try:
-                async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                    head_resp = await client.head(url)
-                    final_url = str(head_resp.url)
-            except Exception:
-                final_url = url
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                final_url = str(resp.url)
+        except Exception:
+            final_url = url
 
         # Extrair ID do Mercado Livre (ex: MLB1234567890)
         ml_match = re.search(r'(MLB[-]?\d+)', final_url.upper().replace('%2F', '/'))
