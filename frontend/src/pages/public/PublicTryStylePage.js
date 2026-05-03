@@ -4,8 +4,9 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Camera, ArrowLeft, Download, Scissors, Image as ImageIcon, Coins } from "lucide-react";
+import { Upload, Camera, ArrowLeft, Download, Scissors, Image as ImageIcon, Coins, UserPlus } from "lucide-react";
 import { toast, Toaster } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 import { AffiliateBanner } from "@/components/AffiliateBanner";
 import PaymentQR from "@/components/PaymentQR";
 import "@/App.css";
@@ -213,6 +214,28 @@ export default function PublicTryStylePage({ kioskMode = false }) {
               </label>
             </div>
             <div className="mt-8 px-4 max-w-4xl mx-auto w-full">
+              {barbershopId && (
+                <Card className="bg-surface border-border p-5 mb-6 flex flex-col sm:flex-row items-center gap-5">
+                  <div className="bg-white p-2 rounded-lg shrink-0">
+                    <QRCodeSVG
+                      value={`${window.location.origin}/cliente/registrar?b=${barbershopId}`}
+                      size={140}
+                      level="H"
+                      includeMargin={false}
+                    />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h3 className="text-gold font-bold text-lg flex items-center justify-center sm:justify-start gap-2 mb-1">
+                      <UserPlus className="w-5 h-5" />
+                      Seja cliente da {info?.barbershop_name || "barbearia"}
+                    </h3>
+                    <p className="text-sm text-zinc-400 mb-2">
+                      Escaneie o QR Code com seu celular para criar sua conta e acessar seus resultados, agendamentos e descontos exclusivos.
+                    </p>
+                    <p className="text-xs text-zinc-500">Ou acesse: <span className="text-primary">{window.location.origin}/cliente/registrar?b={barbershopId.slice(0, 8)}...</span></p>
+                  </div>
+                </Card>
+              )}
               <AffiliateBanner barbershopId={barbershopId} />
             </div>
           </div>
