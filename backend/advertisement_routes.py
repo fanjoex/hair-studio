@@ -170,54 +170,78 @@ async def fetch_product_from_url(url: str):
         
         if ml_match:
             item_id = ml_match.group(1).replace('-', '')
-            async with httpx.AsyncClient(timeout=10) as client:
-                # Buscar dados do item
+            async with httpx.AsyncClient(timeout=15) as client:
+
+                def _extract_brand(attributes):
+                    for attr in attributes:
+                        if attr.get("id") == "BRAND":
+                            return attr.get("value_name", "")
+                    return ""
+
+                def _format_price(price):
+                    return f"R$ {price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                def _best_image(pictures, fallback=""):
+                    if pictures:
+                        url_img = pictures[0].get("url", fallback)
+                        return url_img.replace("_I.", "_O.").replace("-I.", "-O.")
+                    return fallback
+
+                # 1) Tentar API de items (listing direto)
                 item_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}")
-                if item_resp.status_code != 200:
-                    raise HTTPException(status_code=404, detail="Produto não encontrado no Mercado Livre")
-                
-                item = item_resp.json()
-                
-                # Buscar atributos para marca
-                brand = ""
-                for attr in item.get("attributes", []):
-                    if attr.get("id") == "BRAND":
-                        brand = attr.get("value_name", "")
-                        break
-                
-                # Buscar descrição
-                desc = ""
-                try:
-                    desc_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}/description")
-                    if desc_resp.status_code == 200:
-                        desc = desc_resp.json().get("plain_text", "")[:200]
-                except Exception:
-                    pass
-                
-                # Formatar preço em BRL
-                price = item.get("price", 0)
-                price_str = f"R$ {price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                
-                # Pegar melhor imagem
-                pictures = item.get("pictures", [])
-                image_url = ""
-                if pictures:
-                    image_url = pictures[0].get("url", item.get("thumbnail", ""))
-                else:
-                    image_url = item.get("thumbnail", "")
-                # Usar imagem de maior resolução (substituir _I.jpg por _O.jpg)
-                image_url = image_url.replace("_I.", "_O.").replace("-I.", "-O.")
-                
-                return {
-                    "name": item.get("title", ""),
-                    "brand": brand,
-                    "price": price_str,
-                    "description": desc,
-                    "image_url": image_url,
-                    "affiliate_url": url,
-                    "source": "mercadolivre"
-                }
-        
+
+                if item_resp.status_code == 200:
+                    item = item_resp.json()
+                    desc = ""
+                    try:
+                        desc_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}/description")
+                        if desc_resp.status_code == 200:
+                            desc = desc_resp.json().get("plain_text", "")[:200]
+                    except Exception:
+                        pass
+
+                    return {
+                        "name": item.get("title", ""),
+                        "brand": _extract_brand(item.get("attributes", [])),
+                        "price": _format_price(item.get("price", 0)),
+                        "description": desc,
+                        "image_url": _best_image(item.get("pictures", []), item.get("thumbnail", "")),
+                        "affiliate_url": url,
+                        "source": "mercadolivre"
+                    }
+
+                # 2) Tentar API de catálogo de produtos (/p/MLB...)
+                prod_resp = await client.get(f"https://api.mercadolibre.com/products/{item_id}")
+
+                if prod_resp.status_code == 200:
+                    prod = prod_resp.json()
+
+                    # Buscar preço via search de listings deste catálogo
+                    price = 0
+                    try:
+                        search_resp = await client.get(
+                            "https://api.mercadolibre.com/sites/MLB/search",
+                            params={"catalog_product_id": item_id, "limit": 1}
+                        )
+                        if search_resp.status_code == 200:
+                            results = search_resp.json().get("results", [])
+                            if results:
+                                price = results[0].get("price", 0)
+                    except Exception:
+                        pass
+
+                    return {
+                        "name": prod.get("name", ""),
+                        "brand": _extract_brand(prod.get("attributes", [])),
+                        "price": _format_price(price) if price else "",
+                        "description": "",
+                        "image_url": _best_image(prod.get("pictures", [])),
+                        "affiliate_url": url,
+                        "source": "mercadolivre"
+                    }
+
+                raise HTTPException(status_code=404, detail="Produto não encontrado no Mercado Livre")
+
         raise HTTPException(status_code=400, detail="URL não reconhecida. Suporte atual: Mercado Livre (MLB)")
     
     except HTTPException:
