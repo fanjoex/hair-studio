@@ -30,6 +30,25 @@ export function ClientRegister() {
       .catch(() => {});
   }, [barbershopId]);
 
+  // Bloquear cadastro sem barbearia vinculada
+  if (!barbershopId) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Toaster position="top-center" richColors />
+        <Card className="w-full max-w-md p-6 sm:p-8 bg-surface border-border text-center">
+          <h1 className="text-2xl font-bold text-gold mb-3">Link inválido</h1>
+          <p className="text-sm text-zinc-400 mb-6">
+            O cadastro de cliente só pode ser feito através do link de uma barbearia.
+            Peça o link para a barbearia em que você deseja se cadastrar.
+          </p>
+          <Button onClick={() => navigate("/login")} className="btn-gold w-full">
+            Voltar para o login
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.password) {

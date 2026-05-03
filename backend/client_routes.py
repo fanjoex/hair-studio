@@ -64,13 +64,14 @@ async def register_client(data: ClientRegister, response: Response):
         if existing:
             raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
-        # If barbershop_id provided, validate it exists
-        barbershop_name = None
-        if data.barbershop_id:
-            bshop = await db.barbershops.find_one({"id": data.barbershop_id, "status": "active"})
-            if not bshop:
-                raise HTTPException(status_code=404, detail="Barbearia não encontrada")
-            barbershop_name = bshop["name"]
+        # barbershop_id é obrigatório (cliente só existe no contexto de uma barbearia)
+        if not data.barbershop_id:
+            raise HTTPException(status_code=400, detail="Cadastro de cliente requer uma barbearia. Acesse o link da barbearia.")
+
+        bshop = await db.barbershops.find_one({"id": data.barbershop_id, "status": "active"})
+        if not bshop:
+            raise HTTPException(status_code=404, detail="Barbearia não encontrada")
+        barbershop_name = bshop["name"]
 
         user_id = str(ObjectId())
         user_doc = {
