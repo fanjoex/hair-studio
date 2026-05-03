@@ -18,6 +18,8 @@ export function AdvertisementsPage() {
   const [editingAd, setEditingAd] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [searchUrl, setSearchUrl] = useState("");
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => { loadAds(); }, []);
 
@@ -36,7 +38,32 @@ export function AdvertisementsPage() {
   const openCreate = () => {
     setEditingAd(null);
     setForm(EMPTY_FORM);
+    setSearchUrl("");
     setShowForm(true);
+  };
+
+  const fetchFromUrl = async () => {
+    if (!searchUrl.trim()) return;
+    try {
+      setSearching(true);
+      const { data } = await axios.get(`${API}/advertisements/fetch-product`, {
+        params: { url: searchUrl.trim() },
+        withCredentials: true
+      });
+      setForm({
+        name: data.name || "",
+        brand: data.brand || "",
+        price: data.price || "",
+        description: data.description || "",
+        affiliate_url: data.affiliate_url || searchUrl.trim(),
+        image_url: data.image_url || ""
+      });
+      toast.success("Produto encontrado! Revise os dados antes de salvar.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Não foi possível buscar o produto. Verifique o URL.");
+    } finally {
+      setSearching(false);
+    }
   };
 
   const openEdit = (ad) => {
@@ -157,12 +184,32 @@ export function AdvertisementsPage() {
       {showForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <Card className="bg-surface border-border w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-white">{editingAd ? "Editar Propaganda" : "Nova Propaganda"}</h2>
               <button onClick={() => setShowForm(false)} className="text-zinc-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {!editingAd && (
+              <div className="mb-5 p-3 bg-zinc-900 rounded-lg border border-zinc-700">
+                <p className="text-xs text-primary font-semibold mb-2">🔍 Buscar produto por URL (Mercado Livre)</p>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary placeholder-zinc-500"
+                    value={searchUrl}
+                    onChange={(e) => setSearchUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && fetchFromUrl()}
+                    placeholder="Cole o link do produto aqui..."
+                  />
+                  <Button className="btn-gold px-4 shrink-0" onClick={fetchFromUrl} disabled={searching || !searchUrl.trim()}>
+                    {searching ? "..." : "Buscar"}
+                  </Button>
+                </div>
+                <p className="text-xs text-zinc-500 mt-1">O sistema preenche nome, marca, preço e imagem automaticamente.</p>
+              </div>
+            )}
+
             <div className="space-y-4">
               <div>
                 <label className="text-sm text-zinc-400 block mb-1">Nome do produto *</label>

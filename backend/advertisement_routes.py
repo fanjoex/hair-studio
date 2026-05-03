@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Optional, List
 from datetime import datetime, timezone
 import logging
+import re
+import httpx
 
 from advertisement_models import Advertisement, AdvertisementCreate, AdvertisementUpdate
 
@@ -143,6 +145,77 @@ async def delete_barbershop_advertisement(ad_id: str, request: Request):
     except Exception as e:
         logger.error(f"Error deleting advertisement: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== FETCH PRODUCT FROM URL =====
+
+@advertisement_router.get("/fetch-product")
+async def fetch_product_from_url(url: str):
+    """
+    Busca dados de produto a partir de um URL do Mercado Livre.
+    Retorna name, brand, price, description, image_url, affiliate_url.
+    """
+    try:
+        # Extrair ID do Mercado Livre (ex: MLB1234567890)
+        ml_match = re.search(r'(MLB[-]?\d+)', url.upper().replace('%2F', '/'))
+        
+        if ml_match:
+            item_id = ml_match.group(1).replace('-', '')
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Buscar dados do item
+                item_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}")
+                if item_resp.status_code != 200:
+                    raise HTTPException(status_code=404, detail="Produto não encontrado no Mercado Livre")
+                
+                item = item_resp.json()
+                
+                # Buscar atributos para marca
+                brand = ""
+                for attr in item.get("attributes", []):
+                    if attr.get("id") == "BRAND":
+                        brand = attr.get("value_name", "")
+                        break
+                
+                # Buscar descrição
+                desc = ""
+                try:
+                    desc_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}/description")
+                    if desc_resp.status_code == 200:
+                        desc = desc_resp.json().get("plain_text", "")[:200]
+                except Exception:
+                    pass
+                
+                # Formatar preço em BRL
+                price = item.get("price", 0)
+                price_str = f"R$ {price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                
+                # Pegar melhor imagem
+                pictures = item.get("pictures", [])
+                image_url = ""
+                if pictures:
+                    image_url = pictures[0].get("url", item.get("thumbnail", ""))
+                else:
+                    image_url = item.get("thumbnail", "")
+                # Usar imagem de maior resolução (substituir _I.jpg por _O.jpg)
+                image_url = image_url.replace("_I.", "_O.").replace("-I.", "-O.")
+                
+                return {
+                    "name": item.get("title", ""),
+                    "brand": brand,
+                    "price": price_str,
+                    "description": desc,
+                    "image_url": image_url,
+                    "affiliate_url": url,
+                    "source": "mercadolivre"
+                }
+        
+        raise HTTPException(status_code=400, detail="URL não reconhecida. Suporte atual: Mercado Livre (MLB)")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching product from URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar produto: {str(e)}")
 
 
 # ===== MASTER ADMIN ROUTES =====
