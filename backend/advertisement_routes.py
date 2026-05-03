@@ -158,15 +158,22 @@ async def fetch_product_from_url(url: str):
     try:
         # Resolver URL encurtado seguindo redirects (GET, pois HEAD nem sempre redireciona)
         final_url = url
+        response_body = ""
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+                })
                 final_url = str(resp.url)
-        except Exception:
-            final_url = url
+                response_body = resp.text or ""
+        except Exception as e:
+            logger.warning(f"Error following redirect for {url}: {e}")
 
-        # Extrair ID do Mercado Livre (ex: MLB1234567890)
-        ml_match = re.search(r'(MLB[-]?\d+)', final_url.upper().replace('%2F', '/'))
+        # Extrair ID do Mercado Livre (ex: MLB1234567890) — primeiro do URL final, depois do HTML
+        search_space = (final_url + " " + response_body).upper().replace('%2F', '/')
+        ml_match = re.search(r'(MLB[-]?\d+)', search_space)
         
         if ml_match:
             item_id = ml_match.group(1).replace('-', '')
