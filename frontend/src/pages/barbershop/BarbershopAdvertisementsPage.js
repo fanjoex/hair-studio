@@ -11,9 +11,16 @@ const API = `${BACKEND_URL}/api`;
 
 const EMPTY_FORM = { name: "", brand: "", price: "", description: "", affiliate_url: "", image_url: "" };
 
+const PLAN_LABELS = {
+  free: "Grátis",
+  basic: "Básico",
+  premium: "Premium",
+};
+
 export function BarbershopAdvertisementsPage() {
   const [globalAds, setGlobalAds] = useState([]);
   const [customAds, setCustomAds] = useState([]);
+  const [plan, setPlan] = useState({ name: "free", limit: 0, current: 0, can_create: false });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
@@ -28,6 +35,7 @@ export function BarbershopAdvertisementsPage() {
       const { data } = await axios.get(`${API}/advertisements/barbershop`, { withCredentials: true });
       setGlobalAds(data.global || []);
       setCustomAds(data.custom || []);
+      if (data.plan) setPlan(data.plan);
     } catch (e) {
       toast.error("Erro ao carregar propagandas");
     } finally {
@@ -36,6 +44,14 @@ export function BarbershopAdvertisementsPage() {
   };
 
   const openCreate = () => {
+    if (!plan.can_create) {
+      if (plan.limit === 0) {
+        toast.error("Seu plano atual não permite adicionar propagandas próprias. Faça upgrade!");
+      } else {
+        toast.error(`Limite do seu plano atingido (${plan.current}/${plan.limit}). Faça upgrade!`);
+      }
+      return;
+    }
     setEditingAd(null);
     setForm(EMPTY_FORM);
     setShowForm(true);
@@ -144,11 +160,32 @@ export function BarbershopAdvertisementsPage() {
           </h1>
           <p className="text-zinc-400 text-sm mt-1">Produtos exibidos aos seus clientes durante o teste de estilos IA</p>
         </div>
-        <Button className="btn-gold" onClick={openCreate}>
+        <Button className="btn-gold" onClick={openCreate} disabled={!plan.can_create}>
           <Plus className="w-4 h-4 mr-2" />
           Nova Propaganda
         </Button>
       </div>
+
+      {/* Plan banner */}
+      <Card className="bg-surface border-border p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Badge className={`${plan.name === "premium" ? "bg-yellow-900 text-yellow-300 border-yellow-700" : plan.name === "basic" ? "bg-blue-900 text-blue-300 border-blue-700" : "bg-zinc-800 text-zinc-300 border-zinc-600"} border text-xs`}>
+            Plano: {PLAN_LABELS[plan.name] || plan.name}
+          </Badge>
+          <p className="text-sm text-zinc-400">
+            {plan.limit === -1 ? (
+              <span>Propagandas próprias: <strong className="text-white">{plan.current}</strong> (ilimitado)</span>
+            ) : plan.limit === 0 ? (
+              <span className="text-amber-400">Seu plano não permite propagandas próprias — faça upgrade</span>
+            ) : (
+              <span>Propagandas próprias: <strong className="text-white">{plan.current}/{plan.limit}</strong></span>
+            )}
+          </p>
+        </div>
+        {plan.name !== "premium" && (
+          <a href="/barbershop/settings" className="text-xs text-primary hover:underline">Fazer upgrade →</a>
+        )}
+      </Card>
 
       {loading ? (
         <div className="text-center py-12 text-zinc-400">Carregando...</div>

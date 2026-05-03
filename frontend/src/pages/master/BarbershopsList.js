@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Users, Briefcase, MapPin, Phone, Mail } from "lucide-react";
 import { toast } from "sonner";
+import axios from "axios";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +17,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+const BACKEND_URL = window.__BACKEND_URL__ || window.location.origin;
+const API = `${BACKEND_URL}/api`;
 
 export function BarbershopsList() {
   const [barbershops, setBarbershops] = useState([]);
@@ -37,6 +41,17 @@ export function BarbershopsList() {
       toast.error("Erro ao carregar barbearias");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePlanChange = async (barbershopId, newPlan) => {
+    try {
+      await axios.put(`${API}/advertisements/admin/barbershops/${barbershopId}/plan`,
+        { plan: newPlan }, { withCredentials: true });
+      toast.success(`Plano alterado para ${newPlan}`);
+      loadBarbershops();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Erro ao alterar plano");
     }
   };
 
@@ -195,11 +210,17 @@ export function BarbershopsList() {
 
               {/* Subscription */}
               <div className="mt-4 pt-4 border-t border-zinc-800">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <span className="text-sm text-zinc-400">Plano</span>
-                  <Badge className="bg-primary/10 text-primary border-primary/20 border capitalize">
-                    {barbershop.subscription.plan}
-                  </Badge>
+                  <select
+                    value={barbershop.subscription.plan}
+                    onChange={(e) => handlePlanChange(barbershop.id, e.target.value)}
+                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary capitalize"
+                  >
+                    <option value="free">Grátis (0 propagandas)</option>
+                    <option value="basic">Básico (4 propagandas)</option>
+                    <option value="premium">Premium (ilimitado)</option>
+                  </select>
                 </div>
               </div>
             </Card>
