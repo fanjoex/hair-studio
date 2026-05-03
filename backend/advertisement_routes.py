@@ -20,8 +20,8 @@ def set_advertisement_db(database):
 
 
 def _get_auth_deps():
-    from server import require_master_admin, require_barbershop_owner
-    return require_master_admin, require_barbershop_owner
+    from barbershop_routes import require_master_admin, require_barbershop_access
+    return require_master_admin, require_barbershop_access
 
 
 @advertisement_router.get("/public/{barbershop_id}")
@@ -63,10 +63,9 @@ async def get_public_advertisements(barbershop_id: str):
 @advertisement_router.get("/barbershop")
 async def get_barbershop_advertisements(request: Request):
     """Buscar propagandas da barbearia logada."""
-    from server import require_barbershop_owner
-    user = await require_barbershop_owner(request)
+    from barbershop_routes import require_barbershop_access
+    user, barbershop_id = await require_barbershop_access(request)
     try:
-        barbershop_id = user.get("barbershop_id")
         global_ads = await db.advertisements.find(
             {"barbershop_id": None, "is_active": True}
         ).to_list(length=50)
@@ -93,10 +92,9 @@ async def get_barbershop_advertisements(request: Request):
 @advertisement_router.post("/barbershop")
 async def create_barbershop_advertisement(request: Request, data: AdvertisementCreate):
     """Criar propaganda própria da barbearia."""
-    from server import require_barbershop_owner
-    user = await require_barbershop_owner(request)
+    from barbershop_routes import require_barbershop_access
+    user, barbershop_id = await require_barbershop_access(request)
     try:
-        barbershop_id = user.get("barbershop_id")
         ad = Advertisement(**data.model_dump(), barbershop_id=barbershop_id)
         ad_dict = ad.model_dump()
         ad_dict['created_at'] = ad_dict['created_at'].isoformat()
@@ -113,10 +111,9 @@ async def create_barbershop_advertisement(request: Request, data: AdvertisementC
 @advertisement_router.put("/barbershop/{ad_id}")
 async def update_barbershop_advertisement(ad_id: str, request: Request, data: AdvertisementUpdate):
     """Atualizar propaganda própria da barbearia."""
-    from server import require_barbershop_owner
-    user = await require_barbershop_owner(request)
+    from barbershop_routes import require_barbershop_access
+    user, barbershop_id = await require_barbershop_access(request)
     try:
-        barbershop_id = user.get("barbershop_id")
         existing = await db.advertisements.find_one({"id": ad_id, "barbershop_id": barbershop_id})
         if not existing:
             raise HTTPException(status_code=404, detail="Advertisement not found")
@@ -134,10 +131,9 @@ async def update_barbershop_advertisement(ad_id: str, request: Request, data: Ad
 @advertisement_router.delete("/barbershop/{ad_id}")
 async def delete_barbershop_advertisement(ad_id: str, request: Request):
     """Deletar propaganda própria da barbearia."""
-    from server import require_barbershop_owner
-    user = await require_barbershop_owner(request)
+    from barbershop_routes import require_barbershop_access
+    user, barbershop_id = await require_barbershop_access(request)
     try:
-        barbershop_id = user.get("barbershop_id")
         result = await db.advertisements.delete_one({"id": ad_id, "barbershop_id": barbershop_id})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Advertisement not found")
@@ -154,7 +150,7 @@ async def delete_barbershop_advertisement(ad_id: str, request: Request):
 @advertisement_router.get("/admin/all")
 async def get_all_advertisements_admin(request: Request):
     """Buscar todas propagandas (apenas master admin)."""
-    from server import require_master_admin
+    from barbershop_routes import require_master_admin
     await require_master_admin(request)
     try:
         cursor = db.advertisements.find().sort("created_at", -1)
@@ -173,7 +169,7 @@ async def get_all_advertisements_admin(request: Request):
 @advertisement_router.post("/admin")
 async def create_global_advertisement(request: Request, data: AdvertisementCreate):
     """Criar propaganda global (apenas master admin)."""
-    from server import require_master_admin
+    from barbershop_routes import require_master_admin
     await require_master_admin(request)
     try:
         ad = Advertisement(**data.model_dump())
@@ -192,7 +188,7 @@ async def create_global_advertisement(request: Request, data: AdvertisementCreat
 @advertisement_router.put("/admin/{ad_id}")
 async def update_global_advertisement(ad_id: str, request: Request, data: AdvertisementUpdate):
     """Atualizar propaganda global (apenas master admin)."""
-    from server import require_master_admin
+    from barbershop_routes import require_master_admin
     await require_master_admin(request)
     try:
         existing = await db.advertisements.find_one({"id": ad_id, "barbershop_id": None})
@@ -212,7 +208,7 @@ async def update_global_advertisement(ad_id: str, request: Request, data: Advert
 @advertisement_router.delete("/admin/{ad_id}")
 async def delete_global_advertisement(ad_id: str, request: Request):
     """Deletar propaganda global (apenas master admin)."""
-    from server import require_master_admin
+    from barbershop_routes import require_master_admin
     await require_master_admin(request)
     try:
         result = await db.advertisements.delete_one({"id": ad_id, "barbershop_id": None})
