@@ -6,8 +6,6 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Optional, List
 from datetime import datetime, timezone
 import logging
-import re
-import httpx
 
 from advertisement_models import Advertisement, AdvertisementCreate, AdvertisementUpdate
 
@@ -145,117 +143,6 @@ async def delete_barbershop_advertisement(ad_id: str, request: Request):
     except Exception as e:
         logger.error(f"Error deleting advertisement: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ===== FETCH PRODUCT FROM URL =====
-
-@advertisement_router.get("/fetch-product")
-async def fetch_product_from_url(url: str):
-    """
-    Busca dados de produto a partir de um URL do Mercado Livre.
-    Retorna name, brand, price, description, image_url, affiliate_url.
-    """
-    try:
-        # Resolver URL encurtado seguindo redirects (GET, pois HEAD nem sempre redireciona)
-        final_url = url
-        response_body = ""
-        try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                resp = await client.get(url, headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-                })
-                final_url = str(resp.url)
-                response_body = resp.text or ""
-        except Exception as e:
-            logger.warning(f"Error following redirect for {url}: {e}")
-
-        # Extrair ID do Mercado Livre (ex: MLB1234567890) — primeiro do URL final, depois do HTML
-        search_space = (final_url + " " + response_body).upper().replace('%2F', '/')
-        ml_match = re.search(r'(MLB[-]?\d+)', search_space)
-        
-        if ml_match:
-            item_id = ml_match.group(1).replace('-', '')
-            async with httpx.AsyncClient(timeout=15) as client:
-
-                def _extract_brand(attributes):
-                    for attr in attributes:
-                        if attr.get("id") == "BRAND":
-                            return attr.get("value_name", "")
-                    return ""
-
-                def _format_price(price):
-                    return f"R$ {price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-                def _best_image(pictures, fallback=""):
-                    if pictures:
-                        url_img = pictures[0].get("url", fallback)
-                        return url_img.replace("_I.", "_O.").replace("-I.", "-O.")
-                    return fallback
-
-                # 1) Tentar API de items (listing direto)
-                item_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}")
-
-                if item_resp.status_code == 200:
-                    item = item_resp.json()
-                    desc = ""
-                    try:
-                        desc_resp = await client.get(f"https://api.mercadolibre.com/items/{item_id}/description")
-                        if desc_resp.status_code == 200:
-                            desc = desc_resp.json().get("plain_text", "")[:200]
-                    except Exception:
-                        pass
-
-                    return {
-                        "name": item.get("title", ""),
-                        "brand": _extract_brand(item.get("attributes", [])),
-                        "price": _format_price(item.get("price", 0)),
-                        "description": desc,
-                        "image_url": _best_image(item.get("pictures", []), item.get("thumbnail", "")),
-                        "affiliate_url": url,
-                        "source": "mercadolivre"
-                    }
-
-                # 2) Tentar API de catálogo de produtos (/p/MLB...)
-                prod_resp = await client.get(f"https://api.mercadolibre.com/products/{item_id}")
-
-                if prod_resp.status_code == 200:
-                    prod = prod_resp.json()
-
-                    # Buscar preço via search de listings deste catálogo
-                    price = 0
-                    try:
-                        search_resp = await client.get(
-                            "https://api.mercadolibre.com/sites/MLB/search",
-                            params={"catalog_product_id": item_id, "limit": 1}
-                        )
-                        if search_resp.status_code == 200:
-                            results = search_resp.json().get("results", [])
-                            if results:
-                                price = results[0].get("price", 0)
-                    except Exception:
-                        pass
-
-                    return {
-                        "name": prod.get("name", ""),
-                        "brand": _extract_brand(prod.get("attributes", [])),
-                        "price": _format_price(price) if price else "",
-                        "description": "",
-                        "image_url": _best_image(prod.get("pictures", [])),
-                        "affiliate_url": url,
-                        "source": "mercadolivre"
-                    }
-
-                raise HTTPException(status_code=404, detail="Produto não encontrado no Mercado Livre")
-
-        raise HTTPException(status_code=400, detail="URL não reconhecida. Suporte atual: Mercado Livre (MLB)")
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching product from URL: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar produto: {str(e)}")
 
 
 # ===== MASTER ADMIN ROUTES =====
