@@ -28,28 +28,11 @@ def set_styles_db(database):
     db = database
 
 
-def compress_image(image_bytes: bytes, max_size: int = 400, quality: int = 75, target_ratio: tuple = (3, 4)) -> tuple:
-    """Compress, crop to target aspect ratio, and resize image. Returns (compressed_bytes, mime_type)."""
+def compress_image(image_bytes: bytes, max_size: int = 600, quality: int = 80) -> tuple:
+    """Compress and resize image keeping original proportions. Returns (compressed_bytes, mime_type)."""
     img = Image.open(io.BytesIO(image_bytes))
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
-    w, h = img.size
-
-    # Crop to target aspect ratio (center crop, bias towards top for portraits)
-    tr_w, tr_h = target_ratio
-    target_aspect = tr_w / tr_h
-    current_aspect = w / h
-
-    if current_aspect > target_aspect:
-        # Image is too wide — crop sides
-        new_w = int(h * target_aspect)
-        left = (w - new_w) // 2
-        img = img.crop((left, 0, left + new_w, h))
-    elif current_aspect < target_aspect:
-        # Image is too tall — crop bottom (keep top for face/hair)
-        new_h = int(w / target_aspect)
-        img = img.crop((0, 0, w, new_h))
-
     w, h = img.size
     if max(w, h) > max_size:
         ratio = max_size / max(w, h)
@@ -380,7 +363,7 @@ async def get_public_barbershop_styles(barbershop_id: str):
 
 @styles_router.get("/public/style-image/{style_id}")
 async def get_style_image(style_id: str):
-    """Serve a style reference image as binary, normalized to 3:4 portrait."""
+    """Serve a style reference image as binary."""
     try:
         style = await db.barbershop_styles.find_one(
             {"id": style_id}, {"_id": 0, "image_url": 1}
@@ -392,15 +375,13 @@ async def get_style_image(style_id: str):
         # Parse data URI: data:image/jpeg;base64,xxxxx
         if image_url.startswith("data:"):
             header, b64data = image_url.split(",", 1)
+            mime = header.split(":")[1].split(";")[0]
         else:
             b64data = image_url
+            mime = "image/jpeg"
 
-        raw_bytes = base64.b64decode(b64data)
-
-        # Normalize to 3:4 portrait on the fly
-        normalized, mime = compress_image(raw_bytes, max_size=400, quality=80, target_ratio=(3, 4))
-
-        return RawResponse(content=normalized, media_type=mime,
+        image_bytes = base64.b64decode(b64data)
+        return RawResponse(content=image_bytes, media_type=mime,
                           headers={"Cache-Control": "public, max-age=86400"})
     except HTTPException:
         raise
