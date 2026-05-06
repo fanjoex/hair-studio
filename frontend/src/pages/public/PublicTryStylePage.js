@@ -255,8 +255,10 @@ export default function PublicTryStylePage({ kioskMode = false }) {
               {/* Photo preview */}
               <div>
                 <Card className="overflow-hidden bg-surface border-border">
-                  <img src={photo} alt="Sua foto" className="w-full aspect-square object-cover" />
-                  <div className="p-3 text-center text-sm text-zinc-400">Sua foto</div>
+                  <div className="style-image-container">
+                    <img src={photo} alt="Sua foto" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="p-2 text-center text-sm text-zinc-400">Sua foto</div>
                 </Card>
               </div>
 
@@ -278,7 +280,7 @@ export default function PublicTryStylePage({ kioskMode = false }) {
                         >
                           <div className="style-image-container">
                             {style.has_image ? (
-                              <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-contain" />
+                              <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
                             ) : (
                               <Scissors className="w-8 h-8 text-zinc-700" />
                             )}
