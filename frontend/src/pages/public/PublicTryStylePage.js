@@ -251,71 +251,67 @@ export default function PublicTryStylePage({ kioskMode = false }) {
               <h2 className="heading-2 text-gold">Escolha o Estilo</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Photo preview */}
-              <div>
-                <Card className="overflow-hidden bg-surface border-border">
-                  <div className="style-image-container">
-                    <img src={photo} alt="Sua foto" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="p-2 text-center text-sm text-zinc-400">Sua foto</div>
-                </Card>
-              </div>
-
-              {/* Styles grid */}
-              <div className="md:col-span-2">
-                {info.styles.length === 0 ? (
-                  <Card className="p-8 bg-surface border-border text-center">
-                    <p className="body-text">Esta barbearia ainda não cadastrou estilos.</p>
+            {info.styles.length === 0 ? (
+              <Card className="p-8 bg-surface border-border text-center">
+                <p className="body-text">Esta barbearia ainda não cadastrou estilos.</p>
+              </Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                  {/* User photo as first card */}
+                  <Card className="overflow-hidden bg-surface border-primary ring-2 ring-primary/30">
+                    <div className="style-image-container">
+                      <img src={photo} alt="Sua foto" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="p-2 text-center">
+                      <p className="text-sm font-semibold text-white">Sua foto</p>
+                    </div>
                   </Card>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-4">
-                      {info.styles.map((style) => (
-                        <Card
-                          key={style.id}
-                          onClick={() => setSelectedStyle(style)}
-                          className={`cursor-pointer bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
-                          data-testid={`public-style-card-${style.id}`}
-                        >
-                          <div className="style-image-container">
-                            {style.has_image ? (
-                              <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <Scissors className="w-8 h-8 text-zinc-700" />
-                            )}
-                          </div>
-                          <div className="p-2">
-                            <p className="text-sm font-semibold text-white truncate">{style.name}</p>
-                            <Badge className="text-[10px] bg-zinc-800 text-zinc-400 border-zinc-700 border mt-1">{CATEGORY_LABELS[style.category] || style.category}</Badge>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mb-2 px-1">
-                      <div className="flex items-center gap-2 text-sm text-zinc-400">
-                        <Coins className="w-4 h-4 text-gold" />
-                        <span>Créditos: <span className={credits > 0 ? "text-green-400" : "text-red-400"}>{credits}</span></span>
-                      </div>
-                      {credits <= 0 && (
-                        <button onClick={() => setShowPayment(true)} className="text-xs text-primary hover:underline">
-                          Comprar créditos
-                        </button>
-                      )}
-                    </div>
-                    <Button
-                      onClick={handleGenerate}
-                      disabled={!selectedStyle || generating}
-                      className="btn-gold w-full text-lg py-6"
-                      data-testid="public-generate-button"
+
+                  {/* Style cards */}
+                  {info.styles.map((style) => (
+                    <Card
+                      key={style.id}
+                      onClick={() => setSelectedStyle(style)}
+                      className={`cursor-pointer bg-surface transition-all ${selectedStyle?.id === style.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-zinc-600"}`}
+                      data-testid={`public-style-card-${style.id}`}
                     >
-                      <Scissors className="w-5 h-5 mr-2" />
-                      {generating ? "Gerando com IA..." : credits > 0 ? "Experimentar Estilo" : "Comprar Créditos"}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
+                      <div className="style-image-container">
+                        {style.has_image ? (
+                          <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Scissors className="w-8 h-8 text-zinc-700" />
+                        )}
+                      </div>
+                      <div className="p-2">
+                        <p className="text-sm font-semibold text-white truncate">{style.name}</p>
+                        <Badge className="text-[10px] bg-zinc-800 text-zinc-400 border-zinc-700 border mt-1">{CATEGORY_LABELS[style.category] || style.category}</Badge>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <Coins className="w-4 h-4 text-gold" />
+                    <span>Créditos: <span className={credits > 0 ? "text-green-400" : "text-red-400"}>{credits}</span></span>
+                  </div>
+                  {credits <= 0 && (
+                    <button onClick={() => setShowPayment(true)} className="text-xs text-primary hover:underline">
+                      Comprar créditos
+                    </button>
+                  )}
+                </div>
+                <Button
+                  onClick={handleGenerate}
+                  disabled={!selectedStyle || generating}
+                  className="btn-gold w-full text-lg py-6"
+                  data-testid="public-generate-button"
+                >
+                  <Scissors className="w-5 h-5 mr-2" />
+                  {generating ? "Gerando com IA..." : credits > 0 ? "Experimentar Estilo" : "Comprar Créditos"}
+                </Button>
+              </>
+            )}
           </div>
         )}
 
