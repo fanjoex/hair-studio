@@ -198,13 +198,13 @@ export function StylesPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {styles.map((style) => (
             <Card key={style.id} className={`bg-surface border-border hover:border-primary/20 transition-all ${!style.active ? "opacity-60" : ""}`} data-testid={`style-card-${style.id}`}>
               {/* Image */}
               <div className="style-image-container">
                 {style.has_image ? (
-                  <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-contain" />
+                  <img src={`${API}/public/style-image/${style.id}`} alt={style.name} className="w-full h-full object-cover" />
                 ) : (
                   <ImageIcon className="w-12 h-12 text-zinc-700" />
                 )}
