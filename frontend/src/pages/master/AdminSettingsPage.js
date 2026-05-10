@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Shield, User, Lock, Phone, MessageSquare, CheckCircle, AlertCircle } from "lucide-react";
+import { Shield, User, Lock, Mail, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
@@ -18,17 +17,11 @@ export function AdminSettingsPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
 
   // Password form
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
-  // WhatsApp setup
-  const [setupWhatsapp, setSetupWhatsapp] = useState("");
-  const [setupCode, setSetupCode] = useState("");
-  const [setupStep, setSetupStep] = useState(0); // 0=form, 1=code sent
 
   // 2FA verification
   const [verificationCode, setVerificationCode] = useState("");
@@ -47,7 +40,6 @@ export function AdminSettingsPage() {
       setName(res.data.name || "");
       setEmail(res.data.email || "");
       setPhone(res.data.phone || "");
-      setWhatsapp(res.data.whatsapp || "");
     } catch (error) {
       toast.error("Erro ao carregar perfil");
     } finally {
@@ -57,10 +49,10 @@ export function AdminSettingsPage() {
 
   const sendCode = async (action) => {
     try {
-      await axios.post(`${API}/admin/send-verification-code`, { action }, { withCredentials: true });
+      const res = await axios.post(`${API}/admin/send-verification-code`, { action }, { withCredentials: true });
       setCodeSent(true);
       setCodeAction(action);
-      toast.success("Código enviado para seu WhatsApp!");
+      toast.success(res.data.message || "Código enviado para seu email!");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Erro ao enviar código");
     }
@@ -68,19 +60,20 @@ export function AdminSettingsPage() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (profile?.has_whatsapp_2fa && !verificationCode) {
-      toast.error("Digite o código de verificação");
+    if (profile?.has_2fa && !verificationCode) {
+      toast.error("Solicite e digite o código de verificação");
       return;
     }
     setSaving(true);
     try {
       await axios.put(`${API}/admin/profile`, {
-        name, email, phone, whatsapp,
-        verification_code: verificationCode,
+        name, email, phone,
+        verification_code: verificationCode || "",
       }, { withCredentials: true });
       toast.success("Perfil atualizado!");
       setVerificationCode("");
       setCodeSent(false);
+      setCodeAction("");
       loadProfile();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Erro ao atualizar");
@@ -99,8 +92,8 @@ export function AdminSettingsPage() {
       toast.error("A nova senha deve ter pelo menos 6 caracteres");
       return;
     }
-    if (profile?.has_whatsapp_2fa && !verificationCode) {
-      toast.error("Digite o código de verificação");
+    if (profile?.has_2fa && !verificationCode) {
+      toast.error("Solicite e digite o código de verificação");
       return;
     }
     setSaving(true);
@@ -108,7 +101,7 @@ export function AdminSettingsPage() {
       await axios.put(`${API}/admin/change-password`, {
         current_password: currentPassword,
         new_password: newPassword,
-        verification_code: verificationCode,
+        verification_code: verificationCode || "",
       }, { withCredentials: true });
       toast.success("Senha alterada com sucesso!");
       setCurrentPassword("");
@@ -116,41 +109,11 @@ export function AdminSettingsPage() {
       setConfirmPassword("");
       setVerificationCode("");
       setCodeSent(false);
+      setCodeAction("");
     } catch (error) {
       toast.error(error.response?.data?.detail || "Erro ao alterar senha");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleSetupWhatsapp = async () => {
-    if (!setupWhatsapp || setupWhatsapp.length < 10) {
-      toast.error("Número inválido. Use formato: 5511999999999");
-      return;
-    }
-    try {
-      await axios.post(`${API}/admin/setup-whatsapp`, { whatsapp: setupWhatsapp }, { withCredentials: true });
-      setSetupStep(1);
-      toast.success("Código enviado!");
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Erro ao enviar código");
-    }
-  };
-
-  const handleConfirmWhatsapp = async () => {
-    if (!setupCode || setupCode.length !== 6) {
-      toast.error("Digite o código de 6 dígitos");
-      return;
-    }
-    try {
-      await axios.post(`${API}/admin/confirm-whatsapp`, { code: setupCode }, { withCredentials: true });
-      toast.success("WhatsApp confirmado! 2FA ativada.");
-      setSetupStep(0);
-      setSetupWhatsapp("");
-      setSetupCode("");
-      loadProfile();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Código inválido");
     }
   };
 
@@ -161,6 +124,37 @@ export function AdminSettingsPage() {
       </div>
     );
   }
+
+  const TwoFABlock = ({ action }) => (
+    profile?.has_2fa ? (
+      <div className="p-4 bg-zinc-900 rounded-lg border border-border space-y-3">
+        <p className="text-sm text-zinc-400 flex items-center gap-2">
+          <Shield className="w-4 h-4 text-primary" />
+          Verificação em duas etapas — código enviado para seu email
+        </p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => sendCode(action)}
+            disabled={codeSent && codeAction === action}
+            className="shrink-0"
+          >
+            <Mail className="w-4 h-4 mr-1" />
+            {codeSent && codeAction === action ? "✓ Enviado" : "Enviar Código"}
+          </Button>
+          <Input
+            placeholder="000000"
+            value={codeAction === action ? verificationCode : ""}
+            onChange={(e) => { setVerificationCode(e.target.value); setCodeAction(action); }}
+            maxLength={6}
+            className="bg-background border-border w-36"
+          />
+        </div>
+      </div>
+    ) : null
+  );
 
   return (
     <div data-testid="admin-settings-page">
@@ -176,51 +170,19 @@ export function AdminSettingsPage() {
             <Shield className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-white">Verificação em Duas Etapas</h2>
           </div>
-
-          {profile?.has_whatsapp_2fa ? (
+          {profile?.has_2fa ? (
             <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
               <CheckCircle className="w-5 h-5 text-green-500" />
               <span className="text-green-400 text-sm font-medium">
-                Ativa — código enviado via WhatsApp ({whatsapp?.slice(0, 4)}****{whatsapp?.slice(-2)})
+                Ativa — código enviado para seu email cadastrado
               </span>
             </div>
           ) : (
-            <div>
-              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg mb-4">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <span className="text-amber-400 text-sm font-medium">
-                  Inativa — configure um número de WhatsApp para ativar
-                </span>
-              </div>
-
-              {setupStep === 0 ? (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="5511999999999"
-                    value={setupWhatsapp}
-                    onChange={(e) => setSetupWhatsapp(e.target.value)}
-                    className="bg-background border-border"
-                  />
-                  <Button onClick={handleSetupWhatsapp} className="shrink-0">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Enviar Código
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="000000"
-                    value={setupCode}
-                    onChange={(e) => setSetupCode(e.target.value)}
-                    maxLength={6}
-                    className="bg-background border-border"
-                  />
-                  <Button onClick={handleConfirmWhatsapp} className="shrink-0">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Confirmar
-                  </Button>
-                </div>
-              )}
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              <span className="text-amber-400 text-sm font-medium">
+                Inativa — configure SMTP_EMAIL no servidor para ativar
+              </span>
             </div>
           )}
         </Card>
@@ -231,74 +193,20 @@ export function AdminSettingsPage() {
             <User className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-white">Dados do Perfil</h2>
           </div>
-
           <form onSubmit={handleUpdateProfile} className="space-y-4">
             <div>
               <Label className="text-zinc-300">Nome</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="bg-background border-border mt-1"
-              />
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-background border-border mt-1" />
             </div>
             <div>
-              <Label className="text-zinc-300">Email</Label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="bg-background border-border mt-1"
-              />
+              <Label className="text-zinc-300">Email (login)</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-background border-border mt-1" />
             </div>
             <div>
               <Label className="text-zinc-300">Telefone</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="5511999999999"
-                className="bg-background border-border mt-1"
-              />
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="11999999999" className="bg-background border-border mt-1" />
             </div>
-            <div>
-              <Label className="text-zinc-300">WhatsApp (para 2FA)</Label>
-              <Input
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="5511999999999"
-                className="bg-background border-border mt-1"
-                disabled={!profile?.has_whatsapp_2fa}
-              />
-              {!profile?.has_whatsapp_2fa && (
-                <p className="text-xs text-zinc-500 mt-1">Configure a 2FA acima para alterar</p>
-              )}
-            </div>
-
-            {/* 2FA Code for profile update */}
-            {profile?.has_whatsapp_2fa && (
-              <div className="p-4 bg-zinc-900 rounded-lg border border-border space-y-3">
-                <p className="text-sm text-zinc-400">Para salvar alterações, solicite um código:</p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => sendCode("update_profile")}
-                    disabled={codeSent && codeAction === "update_profile"}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    {codeSent && codeAction === "update_profile" ? "Código Enviado" : "Enviar Código"}
-                  </Button>
-                  <Input
-                    placeholder="000000"
-                    value={codeAction === "update_profile" ? verificationCode : ""}
-                    onChange={(e) => { setVerificationCode(e.target.value); setCodeAction("update_profile"); }}
-                    maxLength={6}
-                    className="bg-background border-border w-32"
-                  />
-                </div>
-              </div>
-            )}
-
+            <TwoFABlock action="update_profile" />
             <Button type="submit" disabled={saving} className="w-full">
               {saving ? "Salvando..." : "Salvar Alterações"}
             </Button>
@@ -311,63 +219,20 @@ export function AdminSettingsPage() {
             <Lock className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-white">Alterar Senha</h2>
           </div>
-
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
               <Label className="text-zinc-300">Senha Atual</Label>
-              <Input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="bg-background border-border mt-1"
-              />
+              <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="bg-background border-border mt-1" />
             </div>
             <div>
               <Label className="text-zinc-300">Nova Senha</Label>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="bg-background border-border mt-1"
-                placeholder="Mínimo 6 caracteres"
-              />
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="bg-background border-border mt-1" placeholder="Mínimo 6 caracteres" />
             </div>
             <div>
               <Label className="text-zinc-300">Confirmar Nova Senha</Label>
-              <Input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="bg-background border-border mt-1"
-              />
+              <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="bg-background border-border mt-1" />
             </div>
-
-            {/* 2FA Code for password change */}
-            {profile?.has_whatsapp_2fa && (
-              <div className="p-4 bg-zinc-900 rounded-lg border border-border space-y-3">
-                <p className="text-sm text-zinc-400">Para alterar a senha, solicite um código:</p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => sendCode("change_password")}
-                    disabled={codeSent && codeAction === "change_password"}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    {codeSent && codeAction === "change_password" ? "Código Enviado" : "Enviar Código"}
-                  </Button>
-                  <Input
-                    placeholder="000000"
-                    value={codeAction === "change_password" ? verificationCode : ""}
-                    onChange={(e) => { setVerificationCode(e.target.value); setCodeAction("change_password"); }}
-                    maxLength={6}
-                    className="bg-background border-border w-32"
-                  />
-                </div>
-              </div>
-            )}
-
+            <TwoFABlock action="change_password" />
             <Button type="submit" disabled={saving} className="w-full">
               {saving ? "Alterando..." : "Alterar Senha"}
             </Button>
