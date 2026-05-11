@@ -22,6 +22,7 @@ import { AgendaPage } from "@/pages/barbershop/AgendaPage";
 import { SettingsPage } from "@/pages/barbershop/SettingsPage";
 import { StylesPage } from "@/pages/barbershop/StylesPage";
 import { BarbershopAdvertisementsPage } from "@/pages/barbershop/BarbershopAdvertisementsPage";
+import PaymentPage from "@/pages/barbershop/PaymentPage";
 
 // Public Pages
 import PublicBookingPage from "@/pages/public/PublicBookingPage";
@@ -152,6 +153,7 @@ function AppRoutes() {
               <Route path="agenda" element={<AgendaPage />} />
               <Route path="styles" element={<StylesPage />} />
               <Route path="advertisements" element={<BarbershopAdvertisementsPage />} />
+              <Route path="payments" element={<PaymentPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>

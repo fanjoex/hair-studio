@@ -618,6 +618,11 @@ from admin_settings_routes import admin_settings_router, set_admin_settings_db
 set_admin_settings_db(db)
 app.include_router(admin_settings_router)
 
+# Incluir rotas de pagamento
+from payment_routes import payment_router, set_payment_db
+set_payment_db(db)
+app.include_router(payment_router)
+
 # CORS: list of allowed origins. We must NEVER use "*" together with
 # allow_credentials=True (browsers reject it), so we always send a specific list.
 # Override via CORS_ORIGINS env var (comma-separated). The defaults cover the

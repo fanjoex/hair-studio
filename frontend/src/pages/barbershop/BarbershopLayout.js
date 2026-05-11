@@ -1,7 +1,7 @@
 import { Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Users, Briefcase, Calendar, UserCheck, Settings, LogOut, Menu, X, Scissors, Megaphone } from "lucide-react";
+import { LayoutDashboard, Users, Briefcase, Calendar, UserCheck, Settings, LogOut, Menu, X, Scissors, Megaphone, CreditCard } from "lucide-react";
 import { useState } from "react";
 
 export function BarbershopLayout() {
@@ -23,6 +23,7 @@ export function BarbershopLayout() {
     { path: "/barbershop/professionals", icon: UserCheck, label: "Profissionais" },
     { path: "/barbershop/styles", icon: Scissors, label: "Estilos IA" },
     { path: "/barbershop/advertisements", icon: Megaphone, label: "Propagandas" },
+    { path: "/barbershop/payments", icon: CreditCard, label: "Pagamentos" },
     { path: "/barbershop/settings", icon: Settings, label: "Configurações" },
   ];
 
