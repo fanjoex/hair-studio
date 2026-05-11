@@ -179,7 +179,10 @@ export default function PublicTryStylePage({ kioskMode = false }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <Card className="p-8 bg-surface border-border text-center max-w-md">
-          <h2 className="heading-2 mb-2">Barbearia não encontrada</h2>
+          <div className="text-5xl mb-4">✂️</div>
+          <h2 className="heading-2 mb-3 text-gold">Barbearia não encontrada</h2>
+          <p className="text-zinc-400 text-sm">O link que você acessou é inválido ou esta barbearia não está mais disponível.</p>
+          <p className="text-zinc-500 text-xs mt-3">Solicite o link correto diretamente à barbearia.</p>
         </Card>
       </div>
     );
