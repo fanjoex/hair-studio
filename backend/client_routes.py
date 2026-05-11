@@ -178,6 +178,27 @@ async def get_client_ai_history(request: Request):
     return results
 
 
+@client_router.get("/client/payments")
+async def get_client_payments(request: Request):
+    """List the client's Pix charges (linked by client_id in clients collection)."""
+    user = await get_current_client(request)
+    user_id = user["_id"]
+
+    # Find client record linked to this user
+    client_doc = await db.clients.find_one({"user_id": user_id}, {"_id": 0, "id": 1})
+    if not client_doc:
+        return {"charges": [], "total_paid": 0.0}
+
+    client_id = client_doc["id"]
+    charges = await db.charges.find(
+        {"client_id": client_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+
+    total_paid = sum(c["total"] for c in charges if c.get("status") == "paid")
+    return {"charges": charges, "total_paid": round(total_paid, 2)}
+
+
 @client_router.get("/client/appointments")
 async def get_client_appointments(request: Request):
     """List the client's appointments (past and future)."""

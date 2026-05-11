@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import { clientService } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Sparkles, LogOut, Scissors, Clock } from "lucide-react";
+import { Calendar, Sparkles, LogOut, Scissors, Clock, CreditCard, CheckCircle, XCircle, Copy, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+
+const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
+
+const PAY_STATUS = {
+  pending: { label: "Aguardando", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+  paid:    { label: "Pago",       color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
+  cancelled: { label: "Cancelado", color: "text-red-400",  bg: "bg-red-500/10 border-red-500/20" },
+};
 
 const STATUS_LABEL = {
   scheduled: { label: "Agendado", color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
@@ -32,8 +41,10 @@ export function ClientDashboard() {
   const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [payments, setPayments] = useState({ charges: [], total_paid: 0 });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("appointments");
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     loadAll();
@@ -42,19 +53,28 @@ export function ClientDashboard() {
   const loadAll = async () => {
     try {
       setLoading(true);
-      const [p, h, a] = await Promise.all([
+      const [p, h, a, pay] = await Promise.all([
         clientService.getProfile().catch(() => null),
         clientService.getAiHistory().catch(() => []),
         clientService.getAppointments().catch(() => []),
+        axios.get(`${API}/client/payments`, { withCredentials: true }).then(r => r.data).catch(() => ({ charges: [], total_paid: 0 })),
       ]);
       setProfile(p);
       setHistory(h || []);
       setAppointments(a || []);
+      setPayments(pay);
     } catch (e) {
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
     }
+  };
+
+  const copyPix = (code, id) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2500);
+    toast.success("Código Pix copiado!");
   };
 
   const handleLogout = async () => {
@@ -115,22 +135,26 @@ export function ClientDashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-4 border-b border-border">
-          <button
-            onClick={() => setTab("appointments")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === "appointments" ? "text-primary border-b-2 border-primary" : "text-zinc-400 hover:text-white"}`}
-            data-testid="tab-appointments"
-          >
-            <Calendar className="w-4 h-4 inline mr-1" />
-            Agendamentos
+        <div className="flex gap-2 mb-4 border-b border-border overflow-x-auto">
+          <button onClick={() => setTab("appointments")}
+            className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${tab === "appointments" ? "text-primary border-b-2 border-primary" : "text-zinc-400 hover:text-white"}`}
+            data-testid="tab-appointments">
+            <Calendar className="w-4 h-4 inline mr-1" />Agendamentos
           </button>
-          <button
-            onClick={() => setTab("ai")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === "ai" ? "text-primary border-b-2 border-primary" : "text-zinc-400 hover:text-white"}`}
-            data-testid="tab-ai-history"
-          >
-            <Sparkles className="w-4 h-4 inline mr-1" />
-            Histórico de IA
+          <button onClick={() => setTab("payments")}
+            className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${tab === "payments" ? "text-primary border-b-2 border-primary" : "text-zinc-400 hover:text-white"}`}
+            data-testid="tab-payments">
+            <CreditCard className="w-4 h-4 inline mr-1" />Pagamentos
+            {payments.charges.filter(c => c.status === "pending").length > 0 && (
+              <span className="ml-1 bg-amber-500 text-black text-[10px] font-bold rounded-full px-1.5">
+                {payments.charges.filter(c => c.status === "pending").length}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setTab("ai")}
+            className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${tab === "ai" ? "text-primary border-b-2 border-primary" : "text-zinc-400 hover:text-white"}`}
+            data-testid="tab-ai-history">
+            <Sparkles className="w-4 h-4 inline mr-1" />Histórico de IA
           </button>
         </div>
 
@@ -206,6 +230,61 @@ export function ClientDashboard() {
                 )}
               </Card>
             )}
+          </div>
+        )}
+
+        {/* Payments */}
+        {tab === "payments" && (
+          <div className="space-y-3">
+            {payments.total_paid > 0 && (
+              <Card className="p-3 bg-surface border-border flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-semibold">R$ {payments.total_paid.toFixed(2)}</p>
+                  <p className="text-xs text-zinc-500">Total pago via Pix</p>
+                </div>
+              </Card>
+            )}
+
+            {payments.charges.length === 0 ? (
+              <Card className="p-8 bg-surface border-border text-center">
+                <CreditCard className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+                <p className="text-zinc-400">Nenhum pagamento encontrado.</p>
+              </Card>
+            ) : payments.charges.map(c => (
+              <Card key={c.id} className={`p-4 bg-surface border ${PAY_STATUS[c.status]?.bg || "border-border"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm">{c.description}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">{new Date(c.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-primary font-bold">R$ {c.total?.toFixed(2)}</p>
+                    <p className={`text-xs font-medium ${PAY_STATUS[c.status]?.color}`}>{PAY_STATUS[c.status]?.label}</p>
+                  </div>
+                </div>
+
+                {/* Ações para cobranças pendentes */}
+                {c.status === "pending" && c.qr_code && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => copyPix(c.qr_code, c.id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/20 transition">
+                      {copiedId === c.id ? <><Check className="w-3.5 h-3.5" />Copiado!</> : <><Copy className="w-3.5 h-3.5" />Copiar código Pix</>}
+                    </button>
+                    <a
+                      href={`/pagar/${c.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition">
+                      <ExternalLink className="w-3.5 h-3.5" />Abrir
+                    </a>
+                  </div>
+                )}
+              </Card>
+            ))}
           </div>
         )}
 
