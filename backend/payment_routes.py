@@ -181,8 +181,11 @@ def create_pix_manual(total: float, description: str, config: dict) -> dict:
     # ID 26 — Merchant Account Info (Pix)
     gui = _field("00", "BR.GOV.BCB.PIX")
     key = _field("01", pix_key)
-    # Truncate description to 25 chars, only ASCII printable
-    desc_clean = "".join(c for c in description if c.isascii() and c.isprintable())[:25]
+    # Truncate description to 25 chars, only ASCII letters/digits/spaces
+    import unicodedata
+    desc_norm = unicodedata.normalize("NFD", description)
+    desc_ascii = "".join(c for c in desc_norm if unicodedata.category(c) != "Mn")
+    desc_clean = "".join(c for c in desc_ascii if c.isascii() and (c.isalnum() or c == " "))[:25].strip()
     info_add = _field("02", desc_clean) if desc_clean else ""
     merchant_account = _field("26", gui + key + info_add)
 
@@ -201,7 +204,7 @@ def create_pix_manual(total: float, description: str, config: dict) -> dict:
         + _field("54", amount_str)   # Amount
         + _field("58", "BR")         # Country
         + _field("59", "Barbearia")  # Merchant name (max 25 chars)
-        + _field("60", "Brasil")     # Merchant city (max 15 chars)
+        + _field("60", "BELO HORIZONTE")  # Merchant city (max 15 chars)
         + additional
         + "6304"                     # CRC placeholder
     )
