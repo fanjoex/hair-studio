@@ -1,17 +1,26 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import { barbershopService } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Phone, Mail, Search, FileText, History, DollarSign, Calendar, User, Clock } from "lucide-react";
+import { Plus, Edit, Trash2, Phone, Mail, Search, FileText, History, DollarSign, Calendar, User, Clock, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
+
+const PAY_STATUS = {
+  pending: { label: "Aguardando", color: "text-amber-400" },
+  paid: { label: "Pago", color: "text-green-400" },
+  cancelled: { label: "Cancelado", color: "text-red-400" },
+};
 
 const STATUS_LABELS = {
   scheduled: "Agendado",
@@ -38,6 +47,8 @@ export function ClientsList() {
   const [saving, setSaving] = useState(false);
   const [historyData, setHistoryData] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyTab, setHistoryTab] = useState("appointments");
+  const [paymentHistory, setPaymentHistory] = useState(null);
 
   useEffect(() => { loadClients(); }, []);
 
@@ -109,9 +120,15 @@ export function ClientsList() {
   const openHistory = async (client) => {
     setHistoryLoading(true);
     setHistoryData(null);
+    setPaymentHistory(null);
+    setHistoryTab("appointments");
     try {
-      const data = await barbershopService.getClientHistory(client.id);
-      setHistoryData(data);
+      const [apptData, payData] = await Promise.all([
+        barbershopService.getClientHistory(client.id),
+        axios.get(`${API}/payment/client/${client.id}/history`, { withCredentials: true }).then(r => r.data).catch(() => ({ charges: [], total_paid: 0 })),
+      ]);
+      setHistoryData(apptData);
+      setPaymentHistory(payData);
     } catch (error) {
       toast.error("Erro ao carregar histórico");
     } finally {
@@ -221,7 +238,7 @@ export function ClientsList() {
       )}
 
       {/* Client History Dialog */}
-      <Dialog open={!!historyData || historyLoading} onOpenChange={() => { setHistoryData(null); setHistoryLoading(false); }}>
+      <Dialog open={!!historyData || historyLoading} onOpenChange={() => { setHistoryData(null); setHistoryLoading(false); setPaymentHistory(null); }}>
         <DialogContent className="bg-surface border-border max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="client-history-dialog">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
@@ -235,77 +252,116 @@ export function ClientsList() {
               <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             </div>
           ) : historyData ? (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Client Summary */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Card className="flex-1 p-4 bg-background border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary" />
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Card className="flex-1 p-3 bg-background border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold" data-testid="history-client-name">{historyData.client.name}</p>
+                      <p className="text-white text-sm font-semibold" data-testid="history-client-name">{historyData.client.name}</p>
                       <p className="text-xs text-zinc-500">{historyData.client.phone}</p>
                     </div>
                   </div>
                 </Card>
-                <Card className="flex-1 p-4 bg-background border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                      <DollarSign className="w-5 h-5 text-green-400" />
+                <Card className="flex-1 p-3 bg-background border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
+                      <DollarSign className="w-4 h-4 text-green-400" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold" data-testid="history-total-spent">R$ {historyData.total_spent.toFixed(2)}</p>
-                      <p className="text-xs text-zinc-500">Total gasto</p>
+                      <p className="text-white text-sm font-semibold" data-testid="history-total-spent">R$ {historyData.total_spent.toFixed(2)}</p>
+                      <p className="text-xs text-zinc-500">Agendamentos</p>
                     </div>
                   </div>
                 </Card>
-                <Card className="flex-1 p-4 bg-background border-border">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-blue-400" />
+                <Card className="flex-1 p-3 bg-background border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-4 h-4 text-amber-400" />
                     </div>
                     <div>
-                      <p className="text-white font-semibold" data-testid="history-total-visits">{historyData.total_visits}</p>
-                      <p className="text-xs text-zinc-500">Visitas concluídas</p>
+                      <p className="text-white text-sm font-semibold">R$ {(paymentHistory?.total_paid || 0).toFixed(2)}</p>
+                      <p className="text-xs text-zinc-500">Pago via Pix</p>
                     </div>
                   </div>
                 </Card>
               </div>
 
-              {/* Appointments List */}
-              {historyData.appointments.length === 0 ? (
-                <div className="text-center py-8">
-                  <Calendar className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
-                  <p className="text-zinc-500">Nenhum agendamento encontrado</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-zinc-400">{historyData.appointments.length} agendamento(s)</p>
-                  {historyData.appointments.map((apt) => (
-                    <Card key={apt.id} className="p-4 bg-background border-border" data-testid={`history-apt-${apt.id}`}>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <p className="text-white font-medium">{apt.service_name || "Serviço"}</p>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{apt.date}</span>
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{apt.start_time}</span>
-                            {apt.professional_name && (
-                              <span className="flex items-center gap-1"><User className="w-3 h-3" />{apt.professional_name}</span>
-                            )}
-                            {apt.duration_minutes > 0 && <span>{apt.duration_minutes}min</span>}
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-border">
+                {[
+                  { key: "appointments", label: "Agendamentos", count: historyData.appointments.length },
+                  { key: "payments", label: "Pagamentos", count: paymentHistory?.charges?.length || 0 },
+                ].map(t => (
+                  <button key={t.key} onClick={() => setHistoryTab(t.key)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${historyTab === t.key ? "border-primary text-primary" : "border-transparent text-zinc-400 hover:text-white"}`}>
+                    {t.label} ({t.count})
+                  </button>
+                ))}
+              </div>
+
+              {/* Appointments Tab */}
+              {historyTab === "appointments" && (
+                historyData.appointments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
+                    <p className="text-zinc-500">Nenhum agendamento encontrado</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {historyData.appointments.map((apt) => (
+                      <Card key={apt.id} className="p-4 bg-background border-border" data-testid={`history-apt-${apt.id}`}>
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <p className="text-white font-medium">{apt.service_name || "Serviço"}</p>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{apt.date}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{apt.start_time}</span>
+                              {apt.professional_name && <span className="flex items-center gap-1"><User className="w-3 h-3" />{apt.professional_name}</span>}
+                              {apt.duration_minutes > 0 && <span>{apt.duration_minutes}min</span>}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-white font-semibold">R$ {(apt.price || 0).toFixed(2)}</p>
+                            <Badge className={`text-[10px] border mt-1 ${STATUS_COLORS[apt.status] || STATUS_COLORS.scheduled}`}>
+                              {STATUS_LABELS[apt.status] || apt.status}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-white font-semibold">R$ {(apt.price || 0).toFixed(2)}</p>
-                          <Badge className={`text-[10px] border mt-1 ${STATUS_COLORS[apt.status] || STATUS_COLORS.scheduled}`}>
-                            {STATUS_LABELS[apt.status] || apt.status}
-                          </Badge>
+                      </Card>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* Payments Tab */}
+              {historyTab === "payments" && (
+                !paymentHistory?.charges?.length ? (
+                  <div className="text-center py-8">
+                    <CreditCard className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
+                    <p className="text-zinc-500">Nenhum pagamento registrado</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {paymentHistory.charges.map((c) => (
+                      <Card key={c.id} className="p-4 bg-background border-border">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white text-sm font-medium">{c.description}</p>
+                            <p className="text-xs text-zinc-500">{new Date(c.created_at).toLocaleDateString("pt-BR")} · {c.gateway}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-primary font-bold">R$ {c.total?.toFixed(2)}</p>
+                            <p className={`text-xs ${PAY_STATUS[c.status]?.color}`}>{PAY_STATUS[c.status]?.label}</p>
+                          </div>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                      </Card>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           ) : null}

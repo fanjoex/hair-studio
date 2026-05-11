@@ -33,6 +33,7 @@ class ChargeItem(BaseModel):
 class CreateChargeRequest(BaseModel):
     items: List[ChargeItem]
     custom_amount: Optional[float] = None  # valor avulso/desconto
+    client_id: Optional[str] = None
     client_name: Optional[str] = None
     description: Optional[str] = None
 
@@ -237,6 +238,33 @@ async def check_mp_status(external_id: str, config: dict) -> str:
 
 # ===== ROUTES =====
 
+@payment_router.get("/clients/search")
+async def search_clients_for_payment(q: str = "", request: Request = None):
+    """Busca clientes da barbearia para associar a cobrança."""
+    _, barbershop_id = await require_barbershop(request)
+    query = {"barbershop_id": barbershop_id}
+    if q:
+        import re
+        query["$or"] = [
+            {"name": {"$regex": re.escape(q), "$options": "i"}},
+            {"phone": {"$regex": re.escape(q), "$options": "i"}},
+        ]
+    clients = await db.clients.find(query, {"_id": 0, "id": 1, "name": 1, "phone": 1}).to_list(20)
+    return clients
+
+
+@payment_router.get("/client/{client_id}/history")
+async def get_client_payment_history(client_id: str, request: Request):
+    """Histórico de pagamentos de um cliente."""
+    _, barbershop_id = await require_barbershop(request)
+    charges = await db.charges.find(
+        {"barbershop_id": barbershop_id, "client_id": client_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    total_paid = sum(c["total"] for c in charges if c.get("status") == "paid")
+    return {"charges": charges, "total_paid": round(total_paid, 2)}
+
+
 @payment_router.get("/config")
 async def get_payment_config(request: Request):
     """Buscar configuração de gateway da barbearia."""
@@ -297,6 +325,13 @@ async def create_charge(data: CreateChargeRequest, request: Request):
     else:
         gw_data = create_pix_manual(total, description, config)
 
+    # Resolve client name from DB if client_id provided
+    resolved_client_name = data.client_name or ""
+    if data.client_id:
+        client_doc = await db.clients.find_one({"id": data.client_id, "barbershop_id": barbershop_id}, {"_id": 0})
+        if client_doc:
+            resolved_client_name = client_doc.get("name", resolved_client_name)
+
     # Salvar cobrança no banco
     charge_id = str(uuid.uuid4())
     charge = {
@@ -305,7 +340,8 @@ async def create_charge(data: CreateChargeRequest, request: Request):
         "items": [i.model_dump() for i in data.items],
         "total": round(total, 2),
         "description": description,
-        "client_name": data.client_name or "",
+        "client_id": data.client_id or "",
+        "client_name": resolved_client_name,
         "gateway": gw_data["gateway"],
         "external_id": gw_data["external_id"],
         "qr_code": gw_data["qr_code"],

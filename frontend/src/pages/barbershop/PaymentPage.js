@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings, Tv } from "lucide-react";
+import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings, Tv, Search, User, X } from "lucide-react";
 
 const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
 
@@ -22,6 +22,9 @@ export default function PaymentPage() {
   const [selectedItems, setSelectedItems] = useState([]);
   const [customAmount, setCustomAmount] = useState("");
   const [clientName, setClientName] = useState("");
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientResults, setClientResults] = useState([]);
   const [activeCharge, setActiveCharge] = useState(null);
   const [charges, setCharges] = useState([]);
   const [polling, setPolling] = useState(false);
@@ -56,6 +59,15 @@ export default function PaymentPage() {
     }, 3000);
     return () => clearInterval(interval);
   }, [activeCharge]);
+
+  const searchClients = async (q) => {
+    setClientSearch(q);
+    if (q.length < 2) { setClientResults([]); return; }
+    try {
+      const res = await axios.get(`${API}/payment/clients/search?q=${encodeURIComponent(q)}`, { withCredentials: true });
+      setClientResults(res.data);
+    } catch {}
+  };
 
   const loadServices = async () => {
     try {
@@ -105,7 +117,8 @@ export default function PaymentPage() {
       const res = await axios.post(`${API}/payment/charge`, {
         items: selectedItems.length > 0 ? selectedItems : [{ name: "Serviço avulso", price: total() }],
         custom_amount: customAmount !== "" ? parseFloat(customAmount) : null,
-        client_name: clientName || null,
+        client_id: selectedClient?.id || null,
+        client_name: selectedClient?.name || clientName || null,
       }, { withCredentials: true });
       setActiveCharge(res.data);
       setPolling(true);
@@ -169,6 +182,9 @@ export default function PaymentPage() {
     setSelectedItems([]);
     setCustomAmount("");
     setClientName("");
+    setSelectedClient(null);
+    setClientSearch("");
+    setClientResults([]);
   };
 
   return (
@@ -233,9 +249,45 @@ export default function PaymentPage() {
               <Card className="p-6 bg-surface border-border">
                 <h2 className="text-base font-semibold text-white mb-4">Detalhes da Cobrança</h2>
                 <div className="space-y-4">
+                  {/* Client selector */}
                   <div>
-                    <Label className="text-zinc-300">Nome do Cliente (opcional)</Label>
-                    <Input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Ex: João Silva" className="bg-background border-border mt-1" />
+                    <Label className="text-zinc-300">Cliente (opcional)</Label>
+                    {selectedClient ? (
+                      <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-primary/10 border border-primary/30">
+                        <User className="w-4 h-4 text-primary shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{selectedClient.name}</p>
+                          <p className="text-xs text-zinc-400">{selectedClient.phone}</p>
+                        </div>
+                        <button onClick={() => { setSelectedClient(null); setClientSearch(""); setClientResults([]); }} className="text-zinc-400 hover:text-white">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative mt-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                        <Input
+                          value={clientSearch}
+                          onChange={e => searchClients(e.target.value)}
+                          placeholder="Buscar por nome ou telefone..."
+                          className="bg-background border-border pl-9"
+                        />
+                        {clientResults.length > 0 && (
+                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-zinc-900 border border-border rounded-lg shadow-xl overflow-hidden">
+                            {clientResults.map(c => (
+                              <button key={c.id} onClick={() => { setSelectedClient(c); setClientSearch(""); setClientResults([]); }}
+                                className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 text-left">
+                                <User className="w-4 h-4 text-zinc-400 shrink-0" />
+                                <div>
+                                  <p className="text-sm text-white">{c.name}</p>
+                                  <p className="text-xs text-zinc-400">{c.phone}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label className="text-zinc-300">Valor personalizado (substitui serviços selecionados)</Label>
