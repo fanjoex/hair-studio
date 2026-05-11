@@ -10,9 +10,7 @@ from datetime import datetime, timezone, timedelta
 import random
 import logging
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 
 admin_settings_router = APIRouter(prefix="/api/admin")
 db = None
@@ -68,52 +66,46 @@ async def get_current_admin(request: Request) -> dict:
     return user
 
 
-def send_email_code(to_email: str, code: str) -> bool:
+async def send_email_code(to_email: str, code: str) -> None:
     """
-    Send verification code via Gmail SMTP.
-    Requires SMTP_EMAIL and SMTP_PASSWORD env vars.
+    Send verification code via Resend API (HTTPS).
+    Requires RESEND_API_KEY env var.
     """
-    smtp_email = os.environ.get("SMTP_EMAIL")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
+    api_key = os.environ.get("RESEND_API_KEY")
+    if not api_key:
+        raise RuntimeError("RESEND_API_KEY não configurado no servidor")
 
-    if not smtp_email or not smtp_password:
-        logging.error("SMTP_EMAIL or SMTP_PASSWORD not configured")
-        return False
+    html = f"""
+    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;background:#18181b;color:#fff;padding:32px;border-radius:12px;">
+      <h2 style="color:#d4af37;margin-bottom:8px;">Verificação em Duas Etapas</h2>
+      <p style="color:#a1a1aa;">Use o código abaixo para confirmar sua ação:</p>
+      <div style="background:#09090b;border:2px solid #d4af37;border-radius:8px;padding:24px;text-align:center;margin:24px 0;">
+        <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#d4af37;">{code}</span>
+      </div>
+      <p style="color:#71717a;font-size:13px;">⏱ Válido por 5 minutos. Não compartilhe este código.</p>
+      <p style="color:#52525b;font-size:12px;margin-top:16px;">Se não foi você, ignore este email.</p>
+    </div>
+    """
 
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"🔐 Código de verificação: {code}"
-        msg["From"] = f"Hair Studio <{smtp_email}>"
-        msg["To"] = to_email
-
-        html = f"""
-        <div style="font-family:sans-serif;max-width:400px;margin:0 auto;background:#18181b;color:#fff;padding:32px;border-radius:12px;">
-          <h2 style="color:#d4af37;margin-bottom:8px;">Verificação em Duas Etapas</h2>
-          <p style="color:#a1a1aa;">Use o código abaixo para confirmar sua ação:</p>
-          <div style="background:#09090b;border:2px solid #d4af37;border-radius:8px;padding:24px;text-align:center;margin:24px 0;">
-            <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#d4af37;">{code}</span>
-          </div>
-          <p style="color:#71717a;font-size:13px;">⏱ Válido por 5 minutos. Não compartilhe este código.</p>
-          <p style="color:#52525b;font-size:12px;margin-top:16px;">Se não foi você, ignore este email.</p>
-        </div>
-        """
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(smtp_email, smtp_password)
-            server.sendmail(smtp_email, to_email, msg.as_string())
-
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "from": "Hair Studio <onboarding@resend.dev>",
+                    "to": [to_email],
+                    "subject": f"🔐 Código de verificação: {code}",
+                    "html": html,
+                }
+            )
+        if resp.status_code not in (200, 201):
+            logging.error(f"Resend API error {resp.status_code}: {resp.text}")
+            raise RuntimeError(f"Erro ao enviar email: {resp.text}")
         logging.info(f"Verification code sent to {to_email}")
-        return True
-    except smtplib.SMTPAuthenticationError as e:
-        logging.error(f"SMTP authentication failed: {e}")
-        raise RuntimeError(f"Autenticação SMTP falhou: {e}")
-    except smtplib.SMTPException as e:
-        logging.error(f"SMTP error sending to {to_email}: {e}")
-        raise RuntimeError(f"Erro SMTP: {e}")
-    except Exception as e:
-        logging.error(f"Failed to send email to {to_email}: {e}")
-        raise RuntimeError(f"Erro ao enviar email: {e}")
+    except httpx.RequestError as e:
+        logging.error(f"Resend request failed: {e}")
+        raise RuntimeError(f"Falha de conexão com Resend: {e}")
 
 
 # ===== ROUTES =====
@@ -122,12 +114,12 @@ def send_email_code(to_email: str, code: str) -> bool:
 async def get_admin_profile(request: Request):
     """Get master admin profile."""
     user = await get_current_admin(request)
-    smtp_configured = bool(os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD"))
+    has_2fa = bool(os.environ.get("RESEND_API_KEY"))
     return {
         "name": user.get("name", ""),
         "email": user.get("email", ""),
         "phone": user.get("phone", ""),
-        "has_2fa": smtp_configured,
+        "has_2fa": has_2fa,
     }
 
 
@@ -141,7 +133,7 @@ async def send_verification_code(data: SendCodeRequest, request: Request):
     if not email:
         raise HTTPException(status_code=400, detail="Email não encontrado no perfil")
 
-    if not os.environ.get("SMTP_EMAIL"):
+    if not os.environ.get("RESEND_API_KEY"):
         raise HTTPException(status_code=500, detail="Serviço de email não configurado no servidor")
 
     # Generate 6-digit code
@@ -160,7 +152,7 @@ async def send_verification_code(data: SendCodeRequest, request: Request):
 
     # Send via Email
     try:
-        send_email_code(email, code)
+        await send_email_code(email, code)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -176,8 +168,8 @@ async def update_admin_profile(data: VerifyAndUpdateProfile, request: Request):
     user = await get_current_admin(request)
     from bson import ObjectId
 
-    # If 2FA (SMTP) is configured, require verification code
-    if os.environ.get("SMTP_EMAIL"):
+    # If 2FA (Resend) is configured, require verification code
+    if os.environ.get("RESEND_API_KEY"):
         stored_code = user.get("verification_code")
         expires_str = user.get("verification_code_expires")
 
@@ -228,8 +220,8 @@ async def change_admin_password(data: PasswordChange, request: Request):
     if not verify_password(data.current_password, full_user.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="Senha atual incorreta")
 
-    # Verify 2FA code (if SMTP configured)
-    if os.environ.get("SMTP_EMAIL"):
+    # Verify 2FA code (if Resend configured)
+    if os.environ.get("RESEND_API_KEY"):
         stored_code = full_user.get("verification_code")
         expires_str = full_user.get("verification_code_expires")
 
@@ -265,5 +257,5 @@ async def change_admin_password(data: PasswordChange, request: Request):
 async def get_2fa_status(request: Request):
     """Check if 2FA (email) is configured."""
     await get_current_admin(request)
-    smtp_configured = bool(os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD"))
-    return {"enabled": smtp_configured, "method": "email" if smtp_configured else None}
+    has_2fa = bool(os.environ.get("RESEND_API_KEY"))
+    return {"enabled": has_2fa, "method": "email" if has_2fa else None}
