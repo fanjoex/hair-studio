@@ -27,6 +27,7 @@ import PaymentPage from "@/pages/barbershop/PaymentPage";
 // Public Pages
 import PublicBookingPage from "@/pages/public/PublicBookingPage";
 import PublicTryStylePage from "@/pages/public/PublicTryStylePage";
+import PublicPaymentPage from "@/pages/public/PublicPaymentPage";
 
 // Client pages
 import { ClientDashboard } from "@/pages/client/ClientDashboard";
@@ -166,6 +167,9 @@ function AppRoutes() {
 
           {/* Public Booking Page (No auth required) */}
           <Route path="/agendar/:barbershopId" element={<PublicBookingPage />} />
+
+          {/* Public Payment Page (No auth required) */}
+          <Route path="/pagar/:chargeId" element={<PublicPaymentPage />} />
 
           {/* Public Try Style Page (No auth required) */}
           <Route path="/experimentar/:barbershopId" element={<PublicTryStylePage />} />

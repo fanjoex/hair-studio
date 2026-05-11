@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings, Tv, Search, User, X } from "lucide-react";
+import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings, Tv, Search, User, X, Share2, MessageCircle, Link, Copy, Check } from "lucide-react";
 
 const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
 
@@ -25,6 +25,9 @@ export default function PaymentPage() {
   const [selectedClient, setSelectedClient] = useState(null);
   const [clientSearch, setClientSearch] = useState("");
   const [clientResults, setClientResults] = useState([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [pixCopied, setPixCopied] = useState(false);
   const [activeCharge, setActiveCharge] = useState(null);
   const [charges, setCharges] = useState([]);
   const [polling, setPolling] = useState(false);
@@ -166,6 +169,27 @@ export default function PaymentPage() {
     } finally {
       setSavingConfig(false);
     }
+  };
+
+  const paymentLink = activeCharge ? `${window.location.origin}/pagar/${activeCharge.charge_id}` : "";
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(paymentLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2500);
+  };
+
+  const copyPixCode = () => {
+    if (!activeCharge?.qr_code) return;
+    navigator.clipboard.writeText(activeCharge.qr_code);
+    setPixCopied(true);
+    setTimeout(() => setPixCopied(false), 2500);
+  };
+
+  const shareWhatsApp = () => {
+    const name = selectedClient?.name || "cliente";
+    const msg = encodeURIComponent(`Olá ${name}! Seu pagamento de R$ ${activeCharge?.total?.toFixed(2)} está pronto. Acesse o link para pagar via Pix:\n${paymentLink}`);
+    window.open(`https://wa.me/?text=${msg}`, "_blank");
   };
 
   const sendToTotem = async () => {
@@ -364,6 +388,10 @@ export default function PaymentPage() {
                       <Tv className="w-4 h-4 mr-2" />
                       Enviar para Totem
                     </Button>
+                    <Button onClick={() => setShowShareModal(true)} variant="outline" className="border-blue-500 text-blue-400 hover:bg-blue-500/10">
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Enviar para Cliente
+                    </Button>
                     {activeCharge.gateway !== "mercadopago" && (
                       <Button onClick={handleConfirm} variant="outline" className="border-green-500 text-green-400 hover:bg-green-500/10">
                         <CheckCircle className="w-4 h-4 mr-2" />
@@ -383,6 +411,53 @@ export default function PaymentPage() {
               )}
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && activeCharge && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4" onClick={() => setShowShareModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold">Enviar para o Cliente</h3>
+              <button onClick={() => setShowShareModal(false)} className="text-zinc-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <p className="text-zinc-400 text-sm mb-4">Escolha como enviar o link de pagamento para o cliente pagar via Pix no celular dele.</p>
+
+            {/* WhatsApp */}
+            <button onClick={shareWhatsApp} className="w-full flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition mb-3">
+              <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                <MessageCircle className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-green-400 font-medium text-sm">Enviar via WhatsApp</p>
+                <p className="text-zinc-500 text-xs">Abre o WhatsApp com mensagem pronta</p>
+              </div>
+            </button>
+
+            {/* Copiar link */}
+            <button onClick={copyLink} className="w-full flex items-center gap-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition mb-3">
+              <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+                {linkCopied ? <Check className="w-5 h-5 text-white" /> : <Link className="w-5 h-5 text-white" />}
+              </div>
+              <div className="text-left">
+                <p className="text-blue-400 font-medium text-sm">{linkCopied ? "Link copiado!" : "Copiar link de pagamento"}</p>
+                <p className="text-zinc-500 text-xs truncate max-w-[220px]">{paymentLink}</p>
+              </div>
+            </button>
+
+            {/* Copiar código Pix */}
+            <button onClick={copyPixCode} className="w-full flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition">
+              <div className="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
+                {pixCopied ? <Check className="w-5 h-5 text-white" /> : <Copy className="w-5 h-5 text-white" />}
+              </div>
+              <div className="text-left">
+                <p className="text-amber-400 font-medium text-sm">{pixCopied ? "Código copiado!" : "Copiar código Pix"}</p>
+                <p className="text-zinc-500 text-xs">Pix copia e cola</p>
+              </div>
+            </button>
+          </div>
         </div>
       )}
 
