@@ -157,39 +157,56 @@ async def create_ps_charge(total: float, description: str, config: dict) -> dict
 
 
 def create_pix_manual(total: float, description: str, config: dict) -> dict:
-    """Gera payload Pix estático (sem confirmação automática)."""
-    pix_key = config.get("pix_key", "")
+    """Gera payload Pix estático EMV válido conforme spec Banco Central."""
+    pix_key = config.get("pix_key", "").strip()
+    if not pix_key:
+        raise HTTPException(status_code=400, detail="Chave Pix não configurada. Configure em Pagamentos → Configurações.")
 
-    def crc16(data: str) -> str:
+    def _field(id_: str, value: str) -> str:
+        return f"{id_}{len(value):02d}{value}"
+
+    def crc16_ccitt(data: str) -> str:
         crc = 0xFFFF
-        for char in data:
-            crc ^= ord(char) << 8
+        for byte in data.encode("utf-8"):
+            crc ^= byte << 8
             for _ in range(8):
                 if crc & 0x8000:
                     crc = (crc << 1) ^ 0x1021
                 else:
                     crc <<= 1
                 crc &= 0xFFFF
-        return format(crc, '04X')
+        return format(crc, "04X")
+
+    # ID 26 — Merchant Account Info (Pix)
+    gui = _field("00", "BR.GOV.BCB.PIX")
+    key = _field("01", pix_key)
+    # Truncate description to 25 chars, only ASCII printable
+    desc_clean = "".join(c for c in description if c.isascii() and c.isprintable())[:25]
+    info_add = _field("02", desc_clean) if desc_clean else ""
+    merchant_account = _field("26", gui + key + info_add)
+
+    # ID 62 — Additional Data (txid = ***)
+    txid_field = _field("05", "***")
+    additional = _field("62", txid_field)
 
     amount_str = f"{total:.2f}"
-    key_field = f"01{len(pix_key):02d}{pix_key}"
-    gui = "0014BR.GOV.BCB.PIX"
-    merchant_account = f"{gui}{key_field}"
-    ma_field = f"26{len(merchant_account):02d}{merchant_account}"
-    merchant_category = "52040000"
-    currency = "5303986"
-    amount_field = f"54{len(amount_str):02d}{amount_str}"
-    country = "5802BR"
-    name_raw = "Barbearia"
-    city_raw = "Brasil"
-    merchant_name = f"59{len(name_raw):02d}{name_raw}"
-    merchant_city = f"60{len(city_raw):02d}{city_raw}"
-    txid = "***"
-    additional = f"62{len(txid)+4:02d}05{len(txid):02d}{txid}"
-    payload_no_crc = f"{ma_field}{merchant_category}{currency}{amount_field}{country}{merchant_name}{merchant_city}{additional}6304"
-    crc = crc16(payload_no_crc)
-    qr_code = f"{payload_no_crc}{crc}"
+
+    payload_no_crc = (
+        _field("00", "01")           # Payload format indicator
+        + _field("01", "12")         # Point of initiation: 12=static, 11=dynamic
+        + merchant_account
+        + _field("52", "0000")       # Merchant category code
+        + _field("53", "986")        # Currency BRL
+        + _field("54", amount_str)   # Amount
+        + _field("58", "BR")         # Country
+        + _field("59", "Barbearia")  # Merchant name (max 25 chars)
+        + _field("60", "Brasil")     # Merchant city (max 15 chars)
+        + additional
+        + "6304"                     # CRC placeholder
+    )
+
+    crc = crc16_ccitt(payload_no_crc)
+    qr_code = payload_no_crc + crc
 
     return {
         "gateway": "pix_manual",
