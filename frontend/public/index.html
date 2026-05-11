@@ -28,28 +28,27 @@
             #brand-badge {
                 display: inline-flex !important;
                 align-items: center !important;
-                gap: 8px;
+                gap: 5px;
                 position: fixed !important;
-                bottom: 80px;
-                right: 14px;
-                padding: 8px 16px;
+                bottom: 6px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 4px 10px;
                 border-radius: 999px !important;
-                background: rgba(0, 0, 0, 0.8) !important;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(212, 175, 55, 0.45) !important;
-                box-shadow: 0 4px 20px rgba(212, 175, 55, 0.15), inset 0 1px 0 rgba(255, 215, 130, 0.15);
+                background: rgba(0, 0, 0, 0.5) !important;
+                backdrop-filter: blur(6px);
+                border: 1px solid rgba(212, 175, 55, 0.25) !important;
                 text-decoration: none !important;
-                z-index: 99999 !important;
+                z-index: 100 !important;
                 transition: all 0.25s ease;
             }
             #brand-badge:hover {
-                transform: translateY(-2px);
-                border-color: rgba(212, 175, 55, 0.8) !important;
-                box-shadow: 0 6px 28px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255, 215, 130, 0.25);
+                transform: translateX(-50%) translateY(-2px);
+                border-color: rgba(212, 175, 55, 0.5) !important;
             }
             #brand-badge .gold-text {
                 font-family: 'Orbitron', 'Inter', sans-serif !important;
-                font-size: 13px !important;
+                font-size: 10px !important;
                 font-weight: 700 !important;
                 letter-spacing: 0.08em;
                 text-transform: uppercase;
@@ -73,7 +72,8 @@
             }
             #brand-badge .gold-icon {
                 color: #ffd700;
-                filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.5));
+                width: 10px !important;
+                height: 10px !important;
             }
         </style>
         <!--
