@@ -51,7 +51,7 @@ async def require_barbershop(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     role = user.get("role")
-    if role not in ("barbershop_admin", "master_admin", "barbershop_employee"):
+    if role not in ("barbershop_owner", "barbershop_staff", "master_admin", "admin"):
         raise HTTPException(status_code=403, detail="Acesso negado")
     barbershop_id = user.get("barbershop_id")
     if not barbershop_id and role != "master_admin":
