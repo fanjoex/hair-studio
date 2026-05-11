@@ -105,9 +105,15 @@ def send_email_code(to_email: str, code: str) -> bool:
 
         logging.info(f"Verification code sent to {to_email}")
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        logging.error(f"SMTP authentication failed: {e}")
+        raise RuntimeError(f"Autenticação SMTP falhou: {e}")
+    except smtplib.SMTPException as e:
+        logging.error(f"SMTP error sending to {to_email}: {e}")
+        raise RuntimeError(f"Erro SMTP: {e}")
     except Exception as e:
         logging.error(f"Failed to send email to {to_email}: {e}")
-        return False
+        raise RuntimeError(f"Erro ao enviar email: {e}")
 
 
 # ===== ROUTES =====
@@ -153,9 +159,10 @@ async def send_verification_code(data: SendCodeRequest, request: Request):
     )
 
     # Send via Email
-    sent = send_email_code(email, code)
-    if not sent:
-        raise HTTPException(status_code=500, detail="Falha ao enviar código por email. Verifique a configuração SMTP.")
+    try:
+        send_email_code(email, code)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Mask email for response
     parts = email.split("@")
