@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings } from "lucide-react";
+import { CreditCard, Plus, Trash2, Send, CheckCircle, Clock, XCircle, Settings, Tv } from "lucide-react";
 
 const API = (window.__BACKEND_URL__ || window.location.origin) + "/api";
 
@@ -155,6 +155,15 @@ export default function PaymentPage() {
     }
   };
 
+  const sendToTotem = async () => {
+    try {
+      await axios.post(`${API}/payment/charge/${activeCharge.charge_id}/send-to-totem`, {}, { withCredentials: true });
+      toast.success("QR code enviado para o totem!");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erro ao enviar para totem");
+    }
+  };
+
   const newCharge = () => {
     setActiveCharge(null);
     setSelectedItems([]);
@@ -298,9 +307,13 @@ export default function PaymentPage() {
                     <input readOnly value={activeCharge.qr_code} className="bg-transparent text-xs text-zinc-400 flex-1 outline-none truncate" />
                     <button onClick={() => { navigator.clipboard.writeText(activeCharge.qr_code); toast.success("Copiado!"); }} className="text-primary text-xs shrink-0">Copiar</button>
                   </div>
-                  <div className="flex gap-3 justify-center">
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <Button onClick={sendToTotem} className="btn-gold">
+                      <Tv className="w-4 h-4 mr-2" />
+                      Enviar para Totem
+                    </Button>
                     {activeCharge.gateway !== "mercadopago" && (
-                      <Button onClick={handleConfirm} className="btn-gold">
+                      <Button onClick={handleConfirm} variant="outline" className="border-green-500 text-green-400 hover:bg-green-500/10">
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Confirmar Pagamento
                       </Button>

@@ -27,8 +27,9 @@ export default function PublicTryStylePage({ kioskMode = false }) {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
-  const [credits, setCredits] = useState(3); // Start with 3 free uses
+  const [credits, setCredits] = useState(3);
   const [showPayment, setShowPayment] = useState(false);
+  const [totemCharge, setTotemCharge] = useState(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -36,6 +37,28 @@ export default function PublicTryStylePage({ kioskMode = false }) {
   useEffect(() => {
     loadInfo();
   }, [barbershopId]);
+
+  // Kiosk: poll for payment charge sent from barber panel
+  useEffect(() => {
+    if (!kioskMode || !barbershopId) return;
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API}/payment/public/totem-charge/${barbershopId}`);
+        const charge = res.data.charge;
+        if (charge && charge.status === "pending") {
+          setTotemCharge(charge);
+        } else if (totemCharge && (!charge || charge.status !== "pending")) {
+          if (totemCharge.status === "pending" && charge === null) {
+            // Payment was completed or cancelled
+            setTotemCharge(null);
+          }
+        }
+      } catch {}
+    };
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
+  }, [kioskMode, barbershopId, totemCharge]);
 
   // Reset state to initial (used by kiosk mode auto-reset)
   const resetAll = useCallback(() => {
@@ -362,6 +385,28 @@ export default function PublicTryStylePage({ kioskMode = false }) {
           onClose={() => setShowPayment(false)} 
           onSuccess={handlePaymentSuccess}
         />
+      )}
+
+      {/* Totem Payment Overlay — shown when barber sends charge */}
+      {kioskMode && totemCharge && (
+        <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-6">
+          <div className="text-center max-w-sm w-full">
+            <div className="text-5xl mb-4">💳</div>
+            <h2 className="text-2xl font-bold text-gold mb-1">Pagamento</h2>
+            <p className="text-zinc-400 text-sm mb-2">{totemCharge.description}</p>
+            <p className="text-primary text-4xl font-bold mb-6">R$ {totemCharge.total?.toFixed(2)}</p>
+            <div className="flex justify-center mb-4">
+              <div className="bg-white p-4 rounded-xl">
+                <QRCodeSVG value={totemCharge.qr_code} size={220} level="H" />
+              </div>
+            </div>
+            <p className="text-zinc-400 text-sm mt-4">Escaneie o QR code com seu app de banco para pagar via Pix</p>
+            <div className="flex items-center justify-center gap-2 mt-3 text-amber-400 text-sm animate-pulse">
+              <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+              Aguardando pagamento...
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Camera Modal */}

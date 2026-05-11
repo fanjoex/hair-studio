@@ -378,6 +378,58 @@ async def list_charges(request: Request):
     return charges
 
 
+@payment_router.post("/charge/{charge_id}/send-to-totem")
+async def send_to_totem(charge_id: str, request: Request):
+    """Envia cobrança para ser exibida no totem."""
+    _, barbershop_id = await require_barbershop(request)
+    charge = await db.charges.find_one({"id": charge_id, "barbershop_id": barbershop_id})
+    if not charge:
+        raise HTTPException(status_code=404, detail="Cobrança não encontrada")
+    await db.totem_charge.update_one(
+        {"barbershop_id": barbershop_id},
+        {"$set": {"barbershop_id": barbershop_id, "charge_id": charge_id, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"message": "Cobrança enviada ao totem"}
+
+
+@payment_router.delete("/totem-charge")
+async def clear_totem_charge(request: Request):
+    """Limpa cobrança do totem (após pagamento ou cancelamento)."""
+    _, barbershop_id = await require_barbershop(request)
+    await db.totem_charge.delete_one({"barbershop_id": barbershop_id})
+    return {"message": "Totem limpo"}
+
+
+@payment_router.get("/public/totem-charge/{barbershop_id}")
+async def get_totem_charge(barbershop_id: str):
+    """Totem verifica se há cobrança ativa para exibir."""
+    totem = await db.totem_charge.find_one({"barbershop_id": barbershop_id}, {"_id": 0})
+    if not totem:
+        return {"charge": None}
+    charge = await db.charges.find_one({"id": totem["charge_id"]}, {"_id": 0})
+    if not charge or charge["status"] != "pending":
+        await db.totem_charge.delete_one({"barbershop_id": barbershop_id})
+        return {"charge": None}
+
+    if charge["gateway"] == "mercadopago":
+        config = await get_gateway_config(barbershop_id)
+        status = await check_mp_status(charge["external_id"], config)
+        if status != "pending":
+            await db.charges.update_one({"id": charge["id"]}, {"$set": {"status": status}})
+            await db.totem_charge.delete_one({"barbershop_id": barbershop_id})
+            return {"charge": None}
+
+    return {"charge": {
+        "charge_id": charge["id"],
+        "total": charge["total"],
+        "description": charge["description"],
+        "qr_code": charge["qr_code"],
+        "status": charge["status"],
+        "gateway": charge["gateway"],
+    }}
+
+
 @payment_router.get("/public/charge/{charge_id}")
 async def get_public_charge(charge_id: str):
     """Endpoint público para o totem verificar status sem autenticação."""
